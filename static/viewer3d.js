@@ -1,14 +1,14 @@
 "use strict";
 
 /**
- * Интерактивный 3D-превью воксельной схемы (three.js, офлайн-вендор).
+ * Интерактивный 3D-превью сцены из воксельных объектов (three.js, офлайн).
  *
- * r — ответ /api/convert (relief) или /api/vox: gridB64 (1 байт = блок,
- * порядок региона: index = (y·depth + z)·width + x), width/height/depth, palette.
- * Управление: левая кнопка/тач — вращение, колесо — зум, правая — контекст-меню.
+ * objects — список {gridB64, palette, width, height, depth, offset:[x,y,z]};
+ * gridB64: 1 байт = блок, порядок региона: index = (y·depth + z)·width + x.
+ * Управление: левая кнопка/тач — вращение, колесо — зум.
  * Возвращает {dispose()} или null, если WebGL недоступен.
  */
-function Viewer3D(container, r) {
+function Viewer3D(container, objects) {
   if (typeof THREE === "undefined") return null;
 
   const maxW = () => Math.min(760, window.innerWidth - 380);
@@ -34,25 +34,36 @@ function Viewer3D(container, r) {
   sun.position.set(1.5, 2.5, 1.5);
   scene.add(sun);
 
-  // Сетка блоков: bytes[(y·depth + z)·width + x], air пропускается
-  const bytes = Uint8Array.from(atob(r.gridB64), (c) => c.charCodeAt(0));
-  const airIdx = r.palette.findIndex((p) => p.name === "minecraft:air");
-  const w = r.width, h = r.height, d = r.depth;
-  const pos = [];
-  const col = [];
-  for (let y = 0; y < h; y++) {
-    for (let z = 0; z < d; z++) {
-      for (let x = 0; x < w; x++) {
-        const p = bytes[(y * d + z) * w + x];
-        if (airIdx >= 0 && p === airIdx) continue;
-        pos.push(x - w / 2, y - h / 2, z - d / 2);
-        const c = r.palette[p].color;
-        col.push(c[0] / 255, c[1] / 255, c[2] / 255);
-      }
-    }
+  // Общий bounding box сцены
+  let minX = Infinity, minY = Infinity, minZ = Infinity;
+  let maxX = -Infinity, maxY = -Infinity, maxZ = -Infinity;
+  for (const o of objects) {
+    const [ox, oy, oz] = o.offset || [0, 0, 0];
+    minX = Math.min(minX, ox); maxX = Math.max(maxX, ox + o.width);
+    minY = Math.min(minY, oy); maxY = Math.max(maxY, oy + o.height);
+    minZ = Math.min(minZ, oz); maxZ = Math.max(maxZ, oz + o.depth);
   }
 
-  if (pos.length > 0) {
+  // По одному InstancedMesh на объект, air пропускается
+  for (const o of objects) {
+    const bytes = Uint8Array.from(atob(o.gridB64), (c) => c.charCodeAt(0));
+    const airIdx = o.palette.findIndex((p) => p.name === "minecraft:air");
+    const [ox, oy, oz] = o.offset || [0, 0, 0];
+    const w = o.width, h = o.height, d = o.depth;
+    const pos = [];
+    const col = [];
+    for (let y = 0; y < h; y++) {
+      for (let z = 0; z < d; z++) {
+        for (let x = 0; x < w; x++) {
+          const p = bytes[(y * d + z) * w + x];
+          if (airIdx >= 0 && p === airIdx) continue;
+          pos.push(x + ox, y + oy, z + oz);
+          const c = o.palette[p].color;
+          col.push(c[0] / 255, c[1] / 255, c[2] / 255);
+        }
+      }
+    }
+    if (pos.length === 0) continue;
     const mesh = new THREE.InstancedMesh(
       new THREE.BoxGeometry(1, 1, 1),
       new THREE.MeshLambertMaterial(),
@@ -71,8 +82,9 @@ function Viewer3D(container, r) {
     scene.add(mesh);
   }
 
-  // Камера: сферические координаты вокруг центра модели
-  const maxDim = Math.max(w, h, d, 1);
+  // Камера: сферические координаты вокруг центра bounding box
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2, cz = (minZ + maxZ) / 2;
+  const maxDim = Math.max(maxX - minX, maxY - minY, maxZ - minZ, 1);
   const camera = new THREE.PerspectiveCamera(50, maxW() / maxH(), 0.1, maxDim * 50);
   let yaw = Math.PI / 4;
   let pitch = Math.PI / 6;
@@ -80,11 +92,11 @@ function Viewer3D(container, r) {
 
   function applyCamera() {
     camera.position.set(
-      dist * Math.cos(pitch) * Math.sin(yaw),
-      dist * Math.sin(pitch),
-      dist * Math.cos(pitch) * Math.cos(yaw)
+      cx + dist * Math.cos(pitch) * Math.sin(yaw),
+      cy + dist * Math.sin(pitch),
+      cz + dist * Math.cos(pitch) * Math.cos(yaw)
     );
-    camera.lookAt(0, 0, 0);
+    camera.lookAt(cx, cy, cz);
   }
   applyCamera();
 

@@ -209,6 +209,40 @@ button.primary:hover:not(:disabled) {
   flex: 0 0 16px;
 }
 
+.scene-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.scene-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #9aa0a6;
+}
+
+.scene-row input[type="number"] {
+  width: 42px;
+  padding: 3px 4px;
+  font-size: 12px;
+}
+
+.scene-row button {
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.scene-overwrite {
+  font-size: 11px;
+  color: #9aa0a6;
+  white-space: nowrap;
+}
+
 .bname {
   flex: 1;
 }

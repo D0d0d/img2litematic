@@ -34,6 +34,9 @@ MAX_RELIEF_VOLUME = 8_000_000       # w·h·max_height — верхняя гра
 # Импорт .vox (MagicaVoxel)
 MAX_VOX_VOLUME = 8_000_000          # вокселей в модели
 
+# Композиция сцены (несколько объектов → одна схема)
+MAX_COMPOSE_VOLUME = 8_000_000      # объём объединённой bounding box
+
 # Данные для .litematic
 MINECRAFT_DATA_VERSION = 3839       # Minecraft 1.21 (информационное поле)
 REGION_NAME = "Image"

@@ -10,6 +10,7 @@ const state = {
   result: null,    // ответ convert/vox
   scale: 1,
   viewer: null,    // интерактивный 3D-вьювер
+  scene: [],       // объекты сцены (композиция)
 };
 
 const els = {
@@ -33,6 +34,10 @@ const els = {
   baseblock: $("baseblock"),
   gridlines: $("gridlines"),
   generate: $("generate"),
+  addtoscene: $("addtoscene"),
+  clearscene: $("clearscene"),
+  scenePanel: $("scene-panel"),
+  sceneList: $("scene-list"),
   exportBtn: $("export"),
   stats: $("stats"),
   hover: $("hover"),
@@ -119,6 +124,103 @@ function drawGrid() {
   ctx.stroke();
 }
 
+function sceneObjects() {
+  // Сцена (несколько объектов) или один свежий результат relief/vox
+  if (state.scene.length > 0) return state.scene;
+  const r = state.result;
+  if (r && (r.relief || r.vox)) return [resultAsObject(r)];
+  return null;
+}
+
+function resultAsObject(r) {
+  let sx, sy, sz;
+  if (r.vox) {
+    sx = r.width; sy = r.height; sz = r.depth;
+  } else if (r.orientation === "vertical") {
+    sx = r.width; sy = r.height; sz = r.maxHeight;
+  } else {
+    sx = r.width; sy = r.maxHeight; sz = r.height;
+  }
+  const srcName = state.kind === "vox" ? state.voxFile.name : state.file.name;
+  return {
+    name: srcName,
+    gridB64: r.gridB64,
+    palette: r.palette,
+    width: sx,
+    height: sy,
+    depth: sz,
+    offset: [0, 0, 0],
+    overwrite: false,
+  };
+}
+
+function addToScene() {
+  const r = state.result;
+  if (!r || (!r.relief && !r.vox)) return;
+  const o = resultAsObject(r);
+  if (state.scene.length > 0) {
+    // по умолчанию — рядом с существующими объектами по оси X
+    const right = Math.max(...state.scene.map((s) => s.offset[0] + s.width));
+    o.offset = [right + 1, 0, 0];
+  }
+  state.scene.push(o);
+  renderScenePanel();
+  renderLegend();
+  renderResult();
+}
+
+function renderScenePanel() {
+  els.scenePanel.hidden = state.scene.length === 0;
+  els.sceneList.innerHTML = "";
+  const axes = ["X", "Y", "Z"];
+  state.scene.forEach((o, idx) => {
+    const row = document.createElement("div");
+    row.className = "scene-row";
+
+    const name = document.createElement("span");
+    name.className = "scene-name";
+    name.textContent = o.name.length > 14 ? o.name.slice(0, 13) + "…" : o.name;
+    row.appendChild(name);
+
+    for (let a = 0; a < 3; a++) {
+      const inp = document.createElement("input");
+      inp.type = "number";
+      inp.value = o.offset[a];
+      inp.title = `Смещение по ${axes[a]}`;
+      inp.addEventListener("change", () => {
+        o.offset[a] = parseInt(inp.value, 10) || 0;
+        renderResult();
+      });
+      row.appendChild(inp);
+    }
+
+    const lab = document.createElement("label");
+    lab.className = "checkbox scene-overwrite";
+    lab.title = "Вживление: air объекта не затирает блоки модели (иначе — затирает)";
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !o.overwrite;
+    cb.addEventListener("change", () => {
+      o.overwrite = !cb.checked;
+    });
+    lab.append(cb, "вживить");
+    row.appendChild(lab);
+
+    const del = document.createElement("button");
+    del.textContent = "✕";
+    del.title = "Удалить из сцены";
+    del.addEventListener("click", () => {
+      state.scene.splice(idx, 1);
+      renderScenePanel();
+      renderLegend();
+      renderResult();
+    });
+    row.appendChild(del);
+
+    els.sceneList.appendChild(row);
+  });
+}
+
 function renderResult() {
   const r = state.result;
   const c = els.result;
@@ -128,18 +230,22 @@ function renderResult() {
     state.viewer.dispose();
     state.viewer = null;
   }
+  els.viewer3d.replaceChildren();
 
-  // 3D-вьювер для рельефа и vox (с откатом на проекцию, если WebGL недоступен)
-  if ((r.relief || r.vox) && r.gridB64 && els.view3d.checked) {
+  // 3D-вьювер: сцена целиком или один свежий результат relief/vox
+  const objs = sceneObjects();
+  if (objs && els.view3d.checked) {
     c.hidden = true;
     els.viewer3d.hidden = false;
     els.hover.textContent = "";
-    state.viewer = Viewer3D(els.viewer3d, r);
+    state.viewer = Viewer3D(els.viewer3d, objs);
     if (state.viewer) return;
-    els.viewer3d.hidden = true; // WebGL недоступен — откат
-  } else {
-    els.viewer3d.hidden = true;
+    if (state.scene.length > 0) {
+      els.viewer3d.textContent = "WebGL недоступен — сцена не отображается";
+      return;
+    }
   }
+  els.viewer3d.hidden = true;
   c.hidden = false;
 
   // масштаб отображения: целый множитель, без сглаживания
@@ -203,11 +309,9 @@ function renderResult() {
   }
 }
 
-function renderLegend() {
-  const r = state.result;
-  const total = r.stats.totalBlocks;
+function renderLegendItems(entries, total) {
   els.legend.innerHTML = "";
-  for (const b of r.palette) {
+  for (const b of entries) {
     const li = document.createElement("li");
     const sw = document.createElement("span");
     sw.className = "swatch";
@@ -221,6 +325,31 @@ function renderLegend() {
     li.append(sw, name, cnt);
     els.legend.appendChild(li);
   }
+}
+
+function renderLegend() {
+  if (state.scene.length > 0) {
+    // агрегация палитр всех объектов сцены
+    const byName = new Map();
+    for (const o of state.scene) {
+      for (const p of o.palette) {
+        const e = byName.get(p.name) || { color: p.color, count: 0 };
+        e.count += p.count;
+        byName.set(p.name, e);
+      }
+    }
+    const entries = [...byName.entries()].map(([name, e]) => ({ name, ...e }));
+    entries.sort((a, b) => b.count - a.count);
+    const total = entries.reduce((s, e) => s + e.count, 0);
+    renderLegendItems(entries, total);
+    els.stats.textContent = `Сцена: ${state.scene.length} объект(ов) · ${entries.length} типов блоков`;
+    els.view3dField.hidden = false;
+    els.exportBtn.disabled = false;
+    return;
+  }
+  const r = state.result;
+  const total = r.stats.totalBlocks;
+  renderLegendItems(r.palette, total);
   const orient = r.vox ? "" : r.orientation === "vertical" ? "вертикальная · " : "ковёр · ";
   const mode = r.mode === "adaptive" ? `адаптивный (K=${r.kRequested})` : "полная палитра";
   const dith = r.dither ? " · дизеринг" : "";
@@ -249,6 +378,7 @@ async function generate() {
     const j = await resp.json();
     if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
     state.result = j;
+    els.addtoscene.disabled = !(j.relief || j.vox);
     renderResult();
     renderLegend();
   } catch (e) {
@@ -258,8 +388,50 @@ async function generate() {
   }
 }
 
+async function exportScene() {
+  clearError();
+  els.exportBtn.disabled = true;
+  try {
+    const body = {
+      objects: state.scene.map((o) => ({
+        gridB64: o.gridB64,
+        width: o.width,
+        height: o.height,
+        depth: o.depth,
+        offset: o.offset,
+        palette: o.palette.map((p) => p.name),
+        overwrite: o.overwrite,
+      })),
+    };
+    const resp = await fetch("/api/compose", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!resp.ok) {
+      const j = await resp.json().catch(() => ({}));
+      throw new Error(j.error || `HTTP ${resp.status}`);
+    }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "scene.litematic";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    els.exportBtn.disabled = false;
+  }
+}
+
 async function exportFile() {
   if (!state.result) return;
+  if (state.scene.length > 0) {
+    await exportScene();
+    return;
+  }
   if (state.kind === "vox" && !state.voxFile) return;
   if (state.kind === "image" && !state.file) return;
   clearError();
@@ -351,6 +523,13 @@ els.gridlines.addEventListener("change", () => {
 });
 els.view3d.addEventListener("change", () => {
   if (state.result) renderResult();
+});
+els.addtoscene.addEventListener("click", addToScene);
+els.clearscene.addEventListener("click", () => {
+  state.scene = [];
+  renderScenePanel();
+  renderLegend();
+  renderResult();
 });
 els.generate.addEventListener("click", generate);
 els.exportBtn.addEventListener("click", exportFile);

@@ -12,6 +12,7 @@ from pathlib import Path
 from flask import Flask, Response, jsonify, request, send_from_directory
 
 import config
+from compose import ComposeError, compose_litematic
 from imaging import ImageError, downscale, ensure_rgb, load_image, render_preview_png
 from litematic.writer import build_litematic_bytes
 from palette import PALETTE, block_name, block_rgb, blocks_payload
@@ -291,6 +292,30 @@ def api_vox():
         previewHeight=result.preview_size[1],
         stats={"totalBlocks": result.volume, "filledBlocks": result.total_filled,
                "distinctBlocks": result.effective_k, "sourceSize": list(result.source_size)},
+    )
+
+
+@app.post("/api/compose")
+def api_compose():
+    """Сборка сцены из нескольких объектов → одна .litematic."""
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        raise ApiError(400, "invalid_params", "Ожидается JSON-объект")
+    objects = body.get("objects")
+    if not isinstance(objects, list) or len(objects) == 0:
+        raise ApiError(400, "invalid_params", "objects должен быть непустым списком")
+    ts = body.get("timestamp_ms")
+    if ts is not None and (not isinstance(ts, int) or isinstance(ts, bool) or ts < 0):
+        raise ApiError(400, "invalid_params", "timestamp_ms должен быть целым ≥ 0 или отсутствовать")
+    now = int(time.time() * 1000) if ts is None else ts
+    try:
+        data = compose_litematic(objects, created_ms=now, modified_ms=now)
+    except ComposeError as e:
+        raise ApiError(400, e.code, e.message)
+    return Response(
+        data,
+        mimetype="application/octet-stream",
+        headers={"Content-Disposition": 'attachment; filename="scene.litematic"'},
     )
 
 
