@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>img2litematic — картинка → схема Minecraft</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>img2litematic</h1>
+  <span class="subtitle">картинка → .litematic (2D)</span>
+</header>
+
+<main>
+  <aside class="panel">
+    <label class="file-label">
+      <input type="file" id="file" accept="image/*">
+      <span id="file-name">Выберите изображение…</span>
+    </label>
+
+    <div class="field">
+      <label for="mode">Режим подбора блоков</label>
+      <select id="mode">
+        <option value="adaptive" selected>Адаптивный (k-means)</option>
+        <option value="palette">Полная палитра</option>
+      </select>
+    </div>
+
+    <div class="field" id="k-field">
+      <label for="k">Число блоков K: <b id="k-value">16</b></label>
+      <input type="range" id="k" min="2" max="64" step="1" value="16">
+    </div>
+
+    <div class="field">
+      <label>Ориентация</label>
+      <label class="radio"><input type="radio" name="orientation" value="vertical" checked> Вертикальная картина</label>
+      <label class="radio"><input type="radio" name="orientation" value="floor"> Ковёр на полу</label>
+    </div>
+
+    <div class="field">
+      <label for="target">Макс. сторона (блоки)</label>
+      <input type="number" id="target" min="16" max="512" step="1" value="128">
+    </div>
+
+    <div class="field">
+      <label class="checkbox"><input type="checkbox" id="gridlines" checked> Сетка на превью</label>
+    </div>
+
+    <button id="generate" class="primary">Сгенерировать</button>
+    <button id="export" disabled>Скачать .litematic</button>
+
+    <div id="stats" class="stats"></div>
+    <div id="hover" class="hover"></div>
+    <div id="error" class="error" hidden></div>
+
+    <h3>Блоки</h3>
+    <ul id="legend"></ul>
+  </aside>
+
+  <section class="preview">
+    <div class="pane">
+      <h3>Оригинал</h3>
+      <canvas id="original"></canvas>
+    </div>
+    <div class="pane">
+      <h3>Результат</h3>
+      <canvas id="result"></canvas>
+    </div>
+  </section>
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>
