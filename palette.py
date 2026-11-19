@@ -135,3 +135,19 @@ def palette_lab_array() -> np.ndarray:
 def blocks_payload() -> list[dict]:
     """JSON-представление палитры для GET /api/blocks."""
     return [{"name": b.name, "color": list(b.rgb)} for b in PALETTE]
+
+
+# Воздух: служебный «блок» вне цветовой палитры (используется в 3D-режимах)
+AIR_NAME = "minecraft:air"
+AIR_CODE = len(PALETTE)  # индекс за пределами PALETTE
+AIR_RGB = (205, 213, 219)  # цвет для легенды/превью
+
+
+def block_name(i: int) -> str:
+    """Имя для индекса палитры или AIR_CODE."""
+    return AIR_NAME if i == AIR_CODE else PALETTE[i].name
+
+
+def block_rgb(i: int) -> tuple[int, int, int]:
+    """Цвет для индекса палитры или AIR_CODE."""
+    return AIR_RGB if i == AIR_CODE else PALETTE[i].rgb

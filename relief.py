@@ -16,20 +16,12 @@ from dataclasses import dataclass
 import numpy as np
 from PIL import Image, ImageFilter
 
-from palette import PALETTE
+from palette import AIR_CODE, AIR_NAME, PALETTE, block_name, block_rgb
 from quantize import quantize
 
-AIR_NAME = "minecraft:air"
-AIR_CODE = len(PALETTE)  # служебный индекс «воздуха» — вне палитры цветов
-AIR_RGB = (205, 213, 219)  # цвет для легенды/превью
-
-
-def relief_name(i: int) -> str:
-    return AIR_NAME if i == AIR_CODE else PALETTE[i].name
-
-
-def relief_rgb(i: int) -> tuple[int, int, int]:
-    return AIR_RGB if i == AIR_CODE else PALETTE[i].rgb
+# Обратносовместимые алиасы (используются в app.py и тестах)
+relief_name = block_name
+relief_rgb = block_rgb
 
 
 @dataclass(frozen=True)

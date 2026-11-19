@@ -5,13 +5,17 @@ const $ = (id) => document.getElementById(id);
 const state = {
   file: null,
   fileUrl: null,
-  result: null,   // ответ /api/convert
+  voxFile: null,
+  kind: "image",   // "image" | "vox" — что загружали последним
+  result: null,    // ответ convert/vox
   scale: 1,
 };
 
 const els = {
   file: $("file"),
   fileName: $("file-name"),
+  voxfile: $("voxfile"),
+  voxfileName: $("voxfile-name"),
   mode: $("mode"),
   k: $("k"),
   kValue: $("k-value"),
@@ -63,8 +67,13 @@ function clearError() {
 
 function formData() {
   const fd = new FormData();
-  fd.append("image", state.file);
-  fd.append("params", JSON.stringify(params()));
+  if (state.kind === "vox") {
+    fd.append("vox", state.voxFile);
+    fd.append("params", JSON.stringify({ mode: params().mode, k: params().k }));
+  } else {
+    fd.append("image", state.file);
+    fd.append("params", JSON.stringify(params()));
+  }
   return fd;
 }
 
@@ -111,36 +120,43 @@ function renderResult() {
   const c = els.result;
 
   // масштаб отображения: целый множитель, без сглаживания
+  const dispW = r.vox ? r.previewWidth : r.width;
+  const dispH = r.vox ? r.previewHeight : r.height;
   const maxW = Math.min(760, window.innerWidth - 380);
   const maxH = Math.min(600, window.innerHeight - 190);
-  const scale = Math.max(1, Math.floor(Math.min(maxW / r.width, maxH / r.height)));
-  c.width = r.width * scale;
-  c.height = r.height * scale;
+  const scale = Math.max(1, Math.floor(Math.min(maxW / dispW, maxH / dispH)));
+  c.width = dispW * scale;
+  c.height = dispH * scale;
   const ctx = c.getContext("2d");
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, c.width, c.height);
   state.scale = scale;
 
-  const grid = r.relief ? r.surfaceGrid : r.grid;
-  c.onmousemove = (e) => {
-    const rect = c.getBoundingClientRect();
-    const x = Math.floor((e.clientX - rect.left) / (rect.width / r.width));
-    const y = Math.floor((e.clientY - rect.top) / (rect.height / r.height));
-    if (x < 0 || y < 0 || x >= r.width || y >= r.height) {
-      els.hover.textContent = "";
-      return;
-    }
-    const b = r.palette[grid[y * r.width + x]];
-    els.hover.textContent = `${x}, ${y} → ${shortName(b.name)}`;
-  };
+  const grid = r.vox ? null : r.relief ? r.surfaceGrid : r.grid;
+  if (grid) {
+    c.onmousemove = (e) => {
+      const rect = c.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / (rect.width / r.width));
+      const y = Math.floor((e.clientY - rect.top) / (rect.height / r.height));
+      if (x < 0 || y < 0 || x >= r.width || y >= r.height) {
+        els.hover.textContent = "";
+        return;
+      }
+      const b = r.palette[grid[y * r.width + x]];
+      els.hover.textContent = `${x}, ${y} → ${shortName(b.name)}`;
+    };
+  } else {
+    c.onmousemove = null;
+    els.hover.textContent = "";
+  }
 
-  if (r.relief) {
-    // превью рельефа — затенённая проекция от сервера
+  if (r.relief || r.vox) {
+    // превью — затенённая проекция от сервера
     const img = new Image();
     img.onload = () => {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(img, 0, 0, c.width, c.height);
-      drawGrid();
+      if (!r.vox) drawGrid();
     };
     img.src = "data:image/png;base64," + r.preview;
   } else {
@@ -182,24 +198,30 @@ function renderLegend() {
     li.append(sw, name, cnt);
     els.legend.appendChild(li);
   }
-  const orient = r.orientation === "vertical" ? "вертикальная" : "ковёр";
+  const orient = r.vox ? "" : r.orientation === "vertical" ? "вертикальная · " : "ковёр · ";
   const mode = r.mode === "adaptive" ? `адаптивный (K=${r.kRequested})` : "полная палитра";
   const dith = r.dither ? " · дизеринг" : "";
   const rel = r.relief ? ` · рельеф H=${r.maxHeight}` : "";
+  const vox = r.vox ? ` · vox ${r.width}×${r.height}×${r.depth}` : "";
   els.stats.textContent =
-    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${dith}`;
+    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${vox}${dith}`;
   els.exportBtn.disabled = false;
 }
 
 async function generate() {
-  if (!state.file) {
+  if (state.kind === "vox" && !state.voxFile) {
+    showError("Сначала выберите файл .vox.");
+    return;
+  }
+  if (state.kind === "image" && !state.file) {
     showError("Сначала выберите изображение.");
     return;
   }
   clearError();
   els.generate.disabled = true;
   try {
-    const resp = await fetch("/api/convert", { method: "POST", body: formData() });
+    const url = state.kind === "vox" ? "/api/vox" : "/api/convert";
+    const resp = await fetch(url, { method: "POST", body: formData() });
     const j = await resp.json();
     if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
     state.result = j;
@@ -213,7 +235,9 @@ async function generate() {
 }
 
 async function exportFile() {
-  if (!state.file || !state.result) return;
+  if (!state.result) return;
+  if (state.kind === "vox" && !state.voxFile) return;
+  if (state.kind === "image" && !state.file) return;
   clearError();
   els.exportBtn.disabled = true;
   try {
@@ -226,7 +250,8 @@ async function exportFile() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = (state.file.name.replace(/\.[^.]+$/, "") || "schematic") + ".litematic";
+    const srcName = state.kind === "vox" ? state.voxFile.name : state.file.name;
+    a.download = (srcName.replace(/\.[^.]+$/, "") || "schematic") + ".litematic";
     a.click();
     URL.revokeObjectURL(url);
   } catch (e) {
@@ -244,7 +269,7 @@ function updateKField() {
 
 let debounceTimer = null;
 function autoGenerate() {
-  if (!state.file) return;
+  if (!state.result) return;
   clearTimeout(debounceTimer);
   debounceTimer = setTimeout(generate, 300);
 }
@@ -252,11 +277,21 @@ function autoGenerate() {
 els.file.addEventListener("change", () => {
   const f = els.file.files[0];
   if (!f) return;
+  state.kind = "image";
   state.file = f;
   els.fileName.textContent = f.name;
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.fileUrl = URL.createObjectURL(f);
   drawOriginal();
+  generate();
+});
+
+els.voxfile.addEventListener("change", () => {
+  const f = els.voxfile.files[0];
+  if (!f) return;
+  state.kind = "vox";
+  state.voxFile = f;
+  els.voxfileName.textContent = f.name;
   generate();
 });
 

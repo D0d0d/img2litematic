@@ -31,6 +31,9 @@ DEFAULT_SMOOTHING = 2.0
 DEFAULT_BASE_BLOCK = "minecraft:stone"
 MAX_RELIEF_VOLUME = 8_000_000       # w·h·max_height — верхняя граница объёма
 
+# Импорт .vox (MagicaVoxel)
+MAX_VOX_VOLUME = 8_000_000          # вокселей в модели
+
 # Данные для .litematic
 MINECRAFT_DATA_VERSION = 3839       # Minecraft 1.21 (информационное поле)
 REGION_NAME = "Image"
