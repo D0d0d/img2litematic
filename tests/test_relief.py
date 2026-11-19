@@ -191,6 +191,16 @@ class TestReliefApi:
         assert j["effectiveK"] <= 4 + 2  # поверхности (≤ K) + air + base
         prev = Image.open(io.BytesIO(base64.b64decode(j["preview"])))
         assert prev.size == (j["width"], j["height"])
+        # gridB64: 1 байт = блок, порядок региона (x→z→y), счётчики совпадают
+        raw = base64.b64decode(j["gridB64"])
+        assert len(raw) == j["stats"]["totalBlocks"]
+        assert max(raw) < len(j["palette"])
+        counts = {}
+        for v in raw:
+            counts[v] = counts.get(v, 0) + 1
+        assert [counts.get(i, 0) for i in range(len(j["palette"]))] == [
+            p["count"] for p in j["palette"]
+        ]
 
     def test_volume_cap(self, client, noise_gradient_img, monkeypatch):
         monkeypatch.setattr(config, "MAX_RELIEF_VOLUME", 100)

@@ -74,6 +74,10 @@
       </div>
     </div>
 
+    <div class="field" id="view3d-field" hidden>
+      <label class="checkbox"><input type="checkbox" id="view3d" checked> 3D-вид (вращение мышью)</label>
+    </div>
+
     <div class="field">
       <label class="checkbox"><input type="checkbox" id="gridlines" checked> Сетка на превью</label>
     </div>
@@ -97,10 +101,13 @@
     <div class="pane">
       <h3>Результат</h3>
       <canvas id="result"></canvas>
+      <div id="viewer3d" hidden></div>
     </div>
   </section>
 </main>
 
+<script src="vendor/three.min.js"></script>
+<script src="viewer3d.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

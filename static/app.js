@@ -9,6 +9,7 @@ const state = {
   kind: "image",   // "image" | "vox" — что загружали последним
   result: null,    // ответ convert/vox
   scale: 1,
+  viewer: null,    // интерактивный 3D-вьювер
 };
 
 const els = {
@@ -39,6 +40,9 @@ const els = {
   legend: $("legend"),
   original: $("original"),
   result: $("result"),
+  viewer3d: $("viewer3d"),
+  view3d: $("view3d"),
+  view3dField: $("view3d-field"),
 };
 
 function params() {
@@ -118,6 +122,25 @@ function drawGrid() {
 function renderResult() {
   const r = state.result;
   const c = els.result;
+
+  // сброс старого 3D-вьювера
+  if (state.viewer) {
+    state.viewer.dispose();
+    state.viewer = null;
+  }
+
+  // 3D-вьювер для рельефа и vox (с откатом на проекцию, если WebGL недоступен)
+  if ((r.relief || r.vox) && r.gridB64 && els.view3d.checked) {
+    c.hidden = true;
+    els.viewer3d.hidden = false;
+    els.hover.textContent = "";
+    state.viewer = Viewer3D(els.viewer3d, r);
+    if (state.viewer) return;
+    els.viewer3d.hidden = true; // WebGL недоступен — откат
+  } else {
+    els.viewer3d.hidden = true;
+  }
+  c.hidden = false;
 
   // масштаб отображения: целый множитель, без сглаживания
   const dispW = r.vox ? r.previewWidth : r.width;
@@ -205,6 +228,7 @@ function renderLegend() {
   const vox = r.vox ? ` · vox ${r.width}×${r.height}×${r.depth}` : "";
   els.stats.textContent =
     `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${vox}${dith}`;
+  els.view3dField.hidden = !(r.relief || r.vox);
   els.exportBtn.disabled = false;
 }
 
@@ -323,6 +347,9 @@ for (const radio of document.querySelectorAll('input[name="orientation"]')) {
   radio.addEventListener("change", autoGenerate);
 }
 els.gridlines.addEventListener("change", () => {
+  if (state.result) renderResult();
+});
+els.view3d.addEventListener("change", () => {
   if (state.result) renderResult();
 });
 els.generate.addEventListener("click", generate);
