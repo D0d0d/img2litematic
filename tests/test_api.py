@@ -76,6 +76,7 @@ class TestConvert:
             {"target": 1},
             {"orientation": "diagonal"},
             {"timestamp_ms": -1},
+            {"dither": "yes"},
         ],
     )
     def test_invalid_params(self, client, noise_gradient_img, over):
@@ -113,10 +114,15 @@ class TestConvert:
         assert r.status_code == 400
         assert r.get_json()["code"] == "image_too_large"
 
+    def test_dither_flag(self, client, noise_gradient_img):
+        j = _post(client, "/api/convert", noise_gradient_img, _params(dither=True)).get_json()
+        assert j["dither"] is True
+
 
 class TestExportIntegration:
-    def test_export_matches_convert(self, client, noise_gradient_img):
-        params = _params(timestamp_ms=1234567890)
+    @pytest.mark.parametrize("dither", [False, True])
+    def test_export_matches_convert(self, client, noise_gradient_img, dither):
+        params = _params(timestamp_ms=1234567890, dither=dither)
         j = _post(client, "/api/convert", noise_gradient_img, params).get_json()
         exp = _post(client, "/api/export", noise_gradient_img, params)
         assert exp.status_code == 200
@@ -142,8 +148,9 @@ class TestExportIntegration:
         expected = [j["grid"][(h - 1 - y) * w + x] for y in range(h) for x in range(w)]
         assert decode_block_states(region["BlockStates"], bits, volume) == expected
 
-    def test_export_deterministic(self, client, noise_gradient_img):
-        params = _params(timestamp_ms=42)
+    @pytest.mark.parametrize("dither", [False, True])
+    def test_export_deterministic(self, client, noise_gradient_img, dither):
+        params = _params(timestamp_ms=42, dither=dither)
         a = _post(client, "/api/export", noise_gradient_img, params).data
         b = _post(client, "/api/export", noise_gradient_img, params).data
         assert a == b

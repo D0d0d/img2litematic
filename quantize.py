@@ -27,8 +27,15 @@ class QuantResult:
     effective_k: int     # число использованных типов блоков (≤ K)
 
 
-def quantize(img, mode: str, k: int, seed: int = config.SEED) -> QuantResult:
-    pixels, _w, _h = pixels_scan_order(img)
+def quantize(
+    img, mode: str, k: int, seed: int = config.SEED, dither: bool = False
+) -> QuantResult:
+    """Квантует изображение в блоки; dither=True включает Флойда–Штейнберга.
+
+    Кандидаты дизеринга: в режиме "palette" — все блоки палитры, в "adaptive" —
+    только выбранные k-means'ом блоки (гарантия ≤ K сохраняется).
+    """
+    pixels, w, h = pixels_scan_order(img)
     counter = Counter(pixels)
     uniq = list(counter)  # порядок первого появления — детерминирован
     weights = np.array([counter[c] for c in uniq], dtype=np.int64)
@@ -37,22 +44,76 @@ def quantize(img, mode: str, k: int, seed: int = config.SEED) -> QuantResult:
 
     if mode == "palette":
         mapping = nearest_argmin(lab_u, lab_b)  # uniq → индекс блока палитры
+        cand_lab = lab_b
+        cand_idx = np.arange(len(PALETTE), dtype=np.int64)
     elif mode == "adaptive":
-        mapping, _used = _adaptive_mapping(lab_u, weights, lab_b, k, seed)
+        mapping, used = _adaptive_mapping(lab_u, weights, lab_b, k, seed)
+        used_arr = np.array(used, dtype=np.int64)
+        cand_lab = lab_b[used_arr]
+        cand_idx = used_arr
     else:
         raise ValueError(f"неизвестный режим: {mode!r}")
 
+    if dither:
+        lab_img = rgb_array_to_lab(np.array(pixels, dtype=np.uint8)).reshape(h, w, 3)
+        raw = _floyd_steinberg(lab_img, cand_lab, cand_idx).ravel().tolist()
+    else:
+        cmap = {c: i for i, c in enumerate(uniq)}
+        raw = [mapping[cmap[p]] for p in pixels]
+
     # Выходная палитра: по убыванию count, tie → меньший индекс палитры
-    counts = np.bincount(mapping, weights=weights.astype(np.float64), minlength=len(PALETTE))
-    counts = counts.astype(np.int64)
+    counts = np.bincount(raw, minlength=len(PALETTE))
     used = sorted(
         (b for b in range(len(PALETTE)) if counts[b] > 0),
         key=lambda b: (-counts[b], b),
     )
     order = {b: i for i, b in enumerate(used)}
-    cmap = {c: i for i, c in enumerate(uniq)}
-    grid = [order[mapping[cmap[p]]] for p in pixels]
+    grid = [order[b] for b in raw]
     return QuantResult(grid=grid, palette=used, effective_k=len(used))
+
+
+def _nearest_block(p: np.ndarray, cand_lab: np.ndarray) -> int:
+    """Индекс ближайшего блока-кандидата к точке p (3,) в Lab."""
+    d = cand_lab - p
+    return int(np.argmin(np.einsum("ij,ij->i", d, d)))
+
+
+def _floyd_steinberg(
+    lab_img: np.ndarray, cand_lab: np.ndarray, cand_idx: np.ndarray
+) -> np.ndarray:
+    """Флойд–Штейнберг (serpentine): (h,w,3) Lab → (h,w) индексов палитры.
+
+    Веса ошибки: вправо 7/16, вниз-влево 3/16, вниз 5/16, вниз-вправо 1/16
+    (зеркально для строк справа налево). Детерминирован по построению.
+    """
+    h, w, _ = lab_img.shape
+    out = np.empty((h, w), dtype=np.int64)
+    err = np.zeros((w + 2, 3))
+    for y in range(h):
+        row = lab_img[y]
+        e = np.zeros((w + 2, 3))
+        if y % 2 == 0:  # слева направо
+            for x in range(w):
+                p = row[x] + err[x + 1]
+                bi = _nearest_block(p, cand_lab)
+                out[y, x] = cand_idx[bi]
+                d = p - cand_lab[bi]
+                err[x + 2] += d * (7.0 / 16.0)
+                e[x] += d * (3.0 / 16.0)
+                e[x + 1] += d * (5.0 / 16.0)
+                e[x + 2] += d * (1.0 / 16.0)
+        else:  # справа налево (serpentine)
+            for x in range(w - 1, -1, -1):
+                p = row[x] + err[x + 1]
+                bi = _nearest_block(p, cand_lab)
+                out[y, x] = cand_idx[bi]
+                d = p - cand_lab[bi]
+                err[x] += d * (7.0 / 16.0)
+                e[x + 2] += d * (3.0 / 16.0)
+                e[x + 1] += d * (5.0 / 16.0)
+                e[x] += d * (1.0 / 16.0)
+        err = e
+    return out
 
 
 def _dist_to_nearest(lab_u: np.ndarray, centers: np.ndarray) -> np.ndarray:

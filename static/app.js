@@ -17,6 +17,7 @@ const els = {
   kValue: $("k-value"),
   kField: $("k-field"),
   target: $("target"),
+  dither: $("dither"),
   gridlines: $("gridlines"),
   generate: $("generate"),
   exportBtn: $("export"),
@@ -34,6 +35,7 @@ function params() {
     k: parseInt(els.k.value, 10),
     orientation: document.querySelector('input[name="orientation"]:checked').value,
     target: parseInt(els.target.value, 10),
+    dither: els.dither.checked,
   };
 }
 
@@ -158,8 +160,9 @@ function renderLegend() {
   }
   const orient = r.orientation === "vertical" ? "вертикальная" : "ковёр";
   const mode = r.mode === "adaptive" ? `адаптивный (K=${r.kRequested})` : "полная палитра";
+  const dith = r.dither ? " · дизеринг" : "";
   els.stats.textContent =
-    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}`;
+    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${dith}`;
   els.exportBtn.disabled = false;
 }
 
@@ -241,6 +244,7 @@ els.k.addEventListener("input", () => {
   autoGenerate();
 });
 els.target.addEventListener("change", autoGenerate);
+els.dither.addEventListener("change", autoGenerate);
 for (const radio of document.querySelectorAll('input[name="orientation"]')) {
   radio.addEventListener("change", autoGenerate);
 }

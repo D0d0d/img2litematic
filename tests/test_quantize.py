@@ -109,3 +109,60 @@ class TestPaletteMode:
     def test_uses_many_blocks(self, noise_gradient_img):
         r = _q(noise_gradient_img, "palette", 16)
         assert r.effective_k > 8  # полная палитра богаче адаптивного режима с малым K
+
+
+class TestDither:
+    def test_determinism(self, noise_gradient_img):
+        img = downscale(noise_gradient_img, 32)
+        a = quantize(img, "palette", 16, dither=True)
+        b = quantize(img, "palette", 16, dither=True)
+        assert a.grid == b.grid and a.palette == b.palette
+
+    @pytest.mark.parametrize("k", [2, 8, 16])
+    def test_adaptive_k_guarantee(self, noise_gradient_img, k):
+        # кандидаты дизеринга — только выбранные k-means'ом блоки ⇒ ≤ K
+        img = downscale(noise_gradient_img, 32)
+        r = quantize(img, "adaptive", k, dither=True)
+        assert r.effective_k <= k
+
+    def test_better_local_accuracy(self):
+        # Дизеринг не уменьшает попиксельную ошибку (plain nearest MSE-оптимален),
+        # но размазывает её в высокие частоты: после box-blur 5×5 локальная ошибка
+        # заметно меньше — именно это убирает видимый бандинг на градиентах.
+        from colorutil import rgb_array_to_lab
+        from conftest import scan_pixels
+        from palette import palette_lab_array
+
+        y, x = np.mgrid[0:48, 0:48]
+        arr = np.stack([x * 5.3, y * 5.3, (x + y) * 2.65], axis=-1).astype(np.uint8)
+        img = Image.fromarray(arr, "RGB")
+        lab_img = rgb_array_to_lab(np.array(scan_pixels(img), dtype=np.uint8)).reshape(48, 48, 3)
+        lab_pal = palette_lab_array()
+
+        def blur(a, k=5):
+            h, w, _ = a.shape
+            out = np.zeros_like(a)
+            padded = np.pad(a, ((0, k - 1), (0, k - 1), (0, 0)), mode="edge")
+            for dy in range(k):
+                for dx in range(k):
+                    out += padded[dy : dy + h, dx : dx + w]
+            return out / (k * k)
+
+        def blurred_err(r):
+            cols = lab_pal[np.array(r.palette)][np.array(r.grid)].reshape(48, 48, 3)
+            return float(((blur(lab_img) - blur(cols)) ** 2).mean())
+
+        plain = quantize(img, "palette", 16)
+        dithered = quantize(img, "palette", 16, dither=True)
+        assert blurred_err(dithered) < blurred_err(plain) / 2
+
+    def test_1x1(self):
+        img = Image.new("RGB", (1, 1), (10, 20, 30))
+        for mode in ("adaptive", "palette"):
+            r = quantize(img, mode, 16, dither=True)
+            assert r.effective_k == 1 and len(r.grid) == 1
+
+    def test_grid_valid(self, noise_gradient_img):
+        img = downscale(noise_gradient_img, 32)
+        r = quantize(img, "palette", 16, dither=True)
+        assert all(0 <= g < len(r.palette) for g in r.grid)
