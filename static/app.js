@@ -18,6 +18,14 @@ const els = {
   kField: $("k-field"),
   target: $("target"),
   dither: $("dither"),
+  relief: $("relief"),
+  reliefFields: $("relief-fields"),
+  maxheight: $("maxheight"),
+  maxheightValue: $("maxheight-value"),
+  smoothing: $("smoothing"),
+  smoothingValue: $("smoothing-value"),
+  invert: $("invert"),
+  baseblock: $("baseblock"),
   gridlines: $("gridlines"),
   generate: $("generate"),
   exportBtn: $("export"),
@@ -36,6 +44,11 @@ function params() {
     orientation: document.querySelector('input[name="orientation"]:checked').value,
     target: parseInt(els.target.value, 10),
     dither: els.dither.checked,
+    relief: els.relief.checked,
+    max_height: parseInt(els.maxheight.value, 10),
+    smoothing: parseFloat(els.smoothing.value),
+    invert: els.invert.checked,
+    base_block: els.baseblock.value,
   };
 }
 
@@ -97,22 +110,6 @@ function renderResult() {
   const r = state.result;
   const c = els.result;
 
-  // offscreen-канвас: 1 пиксель = 1 блок
-  const off = document.createElement("canvas");
-  off.width = r.width;
-  off.height = r.height;
-  const octx = off.getContext("2d");
-  const imgData = octx.createImageData(r.width, r.height);
-  const data = imgData.data;
-  for (let i = 0; i < r.grid.length; i++) {
-    const col = r.palette[r.grid[i]].color;
-    data[i * 4] = col[0];
-    data[i * 4 + 1] = col[1];
-    data[i * 4 + 2] = col[2];
-    data[i * 4 + 3] = 255;
-  }
-  octx.putImageData(imgData, 0, 0);
-
   // масштаб отображения: целый множитель, без сглаживания
   const maxW = Math.min(760, window.innerWidth - 380);
   const maxH = Math.min(600, window.innerHeight - 190);
@@ -122,11 +119,9 @@ function renderResult() {
   const ctx = c.getContext("2d");
   ctx.imageSmoothingEnabled = false;
   ctx.clearRect(0, 0, c.width, c.height);
-  ctx.drawImage(off, 0, 0, c.width, c.height);
   state.scale = scale;
 
-  drawGrid();
-
+  const grid = r.relief ? r.surfaceGrid : r.grid;
   c.onmousemove = (e) => {
     const rect = c.getBoundingClientRect();
     const x = Math.floor((e.clientX - rect.left) / (rect.width / r.width));
@@ -135,9 +130,38 @@ function renderResult() {
       els.hover.textContent = "";
       return;
     }
-    const b = r.palette[r.grid[y * r.width + x]];
+    const b = r.palette[grid[y * r.width + x]];
     els.hover.textContent = `${x}, ${y} → ${shortName(b.name)}`;
   };
+
+  if (r.relief) {
+    // превью рельефа — затенённая проекция от сервера
+    const img = new Image();
+    img.onload = () => {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      drawGrid();
+    };
+    img.src = "data:image/png;base64," + r.preview;
+  } else {
+    // offscreen-канвас: 1 пиксель = 1 блок
+    const off = document.createElement("canvas");
+    off.width = r.width;
+    off.height = r.height;
+    const octx = off.getContext("2d");
+    const imgData = octx.createImageData(r.width, r.height);
+    const data = imgData.data;
+    for (let i = 0; i < r.grid.length; i++) {
+      const col = r.palette[r.grid[i]].color;
+      data[i * 4] = col[0];
+      data[i * 4 + 1] = col[1];
+      data[i * 4 + 2] = col[2];
+      data[i * 4 + 3] = 255;
+    }
+    octx.putImageData(imgData, 0, 0);
+    ctx.drawImage(off, 0, 0, c.width, c.height);
+    drawGrid();
+  }
 }
 
 function renderLegend() {
@@ -161,8 +185,9 @@ function renderLegend() {
   const orient = r.orientation === "vertical" ? "вертикальная" : "ковёр";
   const mode = r.mode === "adaptive" ? `адаптивный (K=${r.kRequested})` : "полная палитра";
   const dith = r.dither ? " · дизеринг" : "";
+  const rel = r.relief ? ` · рельеф H=${r.maxHeight}` : "";
   els.stats.textContent =
-    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${dith}`;
+    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${dith}`;
   els.exportBtn.disabled = false;
 }
 
@@ -245,6 +270,20 @@ els.k.addEventListener("input", () => {
 });
 els.target.addEventListener("change", autoGenerate);
 els.dither.addEventListener("change", autoGenerate);
+els.relief.addEventListener("change", () => {
+  els.reliefFields.hidden = !els.relief.checked;
+  autoGenerate();
+});
+els.maxheight.addEventListener("input", () => {
+  els.maxheightValue.textContent = els.maxheight.value;
+  autoGenerate();
+});
+els.smoothing.addEventListener("input", () => {
+  els.smoothingValue.textContent = els.smoothing.value;
+  autoGenerate();
+});
+els.invert.addEventListener("change", autoGenerate);
+els.baseblock.addEventListener("change", autoGenerate);
 for (const radio of document.querySelectorAll('input[name="orientation"]')) {
   radio.addEventListener("change", autoGenerate);
 }
@@ -254,4 +293,21 @@ els.gridlines.addEventListener("change", () => {
 els.generate.addEventListener("click", generate);
 els.exportBtn.addEventListener("click", exportFile);
 
+async function initBaseBlocks() {
+  try {
+    const resp = await fetch("/api/blocks");
+    const j = await resp.json();
+    for (const b of j.blocks) {
+      const opt = document.createElement("option");
+      opt.value = b.name;
+      opt.textContent = shortName(b.name);
+      els.baseblock.appendChild(opt);
+    }
+    els.baseblock.value = "minecraft:stone";
+  } catch (e) {
+    /* некритично: при пустом списке параметр проигнорируется */
+  }
+}
+
 updateKField();
+initBaseBlocks();
