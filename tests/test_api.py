@@ -137,7 +137,10 @@ class TestExportIntegration:
         assert names == [p["name"] for p in j["palette"]]
         bits = max(2, (len(names) - 1).bit_length())
         volume = j["width"] * j["height"]
-        assert decode_block_states(region["BlockStates"], bits, volume) == j["grid"]
+        # vertical: строки инвертированы, чтобы верх картинки был сверху в мире
+        w, h = j["width"], j["height"]
+        expected = [j["grid"][(h - 1 - y) * w + x] for y in range(h) for x in range(w)]
+        assert decode_block_states(region["BlockStates"], bits, volume) == expected
 
     def test_export_deterministic(self, client, noise_gradient_img):
         params = _params(timestamp_ms=42)
@@ -147,9 +150,32 @@ class TestExportIntegration:
 
     def test_floor_orientation(self, client, noise_gradient_img):
         params = _params(orientation="floor", timestamp_ms=1)
+        j = _post(client, "/api/convert", noise_gradient_img, params).get_json()
         exp = _post(client, "/api/export", noise_gradient_img, params)
         root = NbtReader(gzip.decompress(exp.data)).named_tag()[2]
-        assert root["Regions"]["Image"]["Size"] == {"x": 32, "y": 1, "z": 32}
+        region = root["Regions"]["Image"]
+        assert region["Size"] == {"x": 32, "y": 1, "z": 32}
+        # floor: строки изображения → ось z, порядок индексов не меняется
+        bits = max(2, (len(region["BlockStatePalette"][1]) - 1).bit_length())
+        assert decode_block_states(region["BlockStates"], bits, 32 * 32) == j["grid"]
+
+    def test_vertical_not_upside_down(self, client):
+        # 1×2: верх — красный, низ — синий. В регионе y=0 (низ) должен быть
+        # нижний (синий) блок, y=1 (верх) — верхний (красный).
+        from PIL import Image
+
+        img = Image.new("RGB", (1, 2))
+        img.putpixel((0, 0), (255, 0, 0))
+        img.putpixel((0, 1), (0, 0, 255))
+        params = _params(mode="palette", timestamp_ms=1)
+        j = _post(client, "/api/convert", img, params).get_json()
+        exp = _post(client, "/api/export", img, params)
+        root = NbtReader(gzip.decompress(exp.data)).named_tag()[2]
+        region = root["Regions"]["Image"]
+        bits = max(2, (len(region["BlockStatePalette"][1]) - 1).bit_length())
+        decoded = decode_block_states(region["BlockStates"], bits, 2)
+        assert decoded[0] == j["grid"][1]  # y=0 ← нижняя строка изображения
+        assert decoded[1] == j["grid"][0]  # y=1 ← верхняя строка
 
     def test_preview_embedded(self, client, noise_gradient_img):
         params = _params(timestamp_ms=1)

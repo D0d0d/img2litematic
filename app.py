@@ -168,10 +168,14 @@ def api_export():
     w, h = img.size
     if params["orientation"] == "vertical":
         size = (w, h, 1)
+        # Строка 0 изображения — верх. В Minecraft Y растёт вверх, поэтому верхнюю
+        # строку кладём на y = h−1, иначе Litematica вставит картинку вверх ногами.
+        block_indices = [result.grid[(h - 1 - y) * w + x] for y in range(h) for x in range(w)]
     else:
         size = (w, 1, h)
-    # grid построчно (x, y); для обоих ориентаций индекс региона совпадает:
-    # vertical: (y·1+0)·w + x = y·w + x; floor: (0·h+z)·w + x = z·w + x (строки → z)
+        # grid построчно (x, y): строки изображения → ось z; индекс региона совпадает:
+        # (0·h+z)·w + x = z·w + x
+        block_indices = result.grid
 
     ts = params["timestamp_ms"] if params["timestamp_ms"] is not None else int(time.time() * 1000)
     stem = _sanitize_filename(Path(f.filename.replace("\\", "/")).stem)
@@ -188,7 +192,7 @@ def api_export():
         author=config.AUTHOR,
         size=size,
         palette_names=palette_names,
-        block_indices=result.grid,
+        block_indices=block_indices,
         created_ms=ts,
         modified_ms=ts,
         preview_png=preview,
