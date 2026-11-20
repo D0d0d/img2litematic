@@ -74,6 +74,7 @@ const els = {
   legend: $("legend"),
   original: $("original"),
   result: $("result"),
+  winBlocks: $("win-blocks"),
 };
 
 // ---------- Вкладки ----------
@@ -155,10 +156,12 @@ function placeWin(win, x, y) {
   win.dataset.placed = "1";
 }
 
-function setupWindowDrag(win) {
+function setupWindowDrag(win, onHeaderClick) {
   const header = win.querySelector(".win-header");
+  let moved = false;
   header.addEventListener("pointerdown", (e) => {
     if (e.target.classList.contains("win-close")) return;
+    moved = false;
     try {
       header.setPointerCapture(e.pointerId);
     } catch (err) {
@@ -169,8 +172,11 @@ function setupWindowDrag(win) {
     const offX = e.clientX - rect.left;
     const offY = e.clientY - rect.top;
     const move = (ev) => {
+      moved = true;
       const x = Math.min(Math.max(0, ev.clientX - wsRect.left - offX), wsRect.width - rect.width);
       const y = Math.min(Math.max(0, ev.clientY - wsRect.top - offY), wsRect.height - 44);
+      win.style.right = "";
+      win.style.bottom = "";
       win.style.left = x + "px";
       win.style.top = y + "px";
       win.dataset.placed = "1";
@@ -182,10 +188,18 @@ function setupWindowDrag(win) {
     header.addEventListener("pointermove", move);
     header.addEventListener("pointerup", up);
   });
+  if (onHeaderClick) {
+    header.addEventListener("click", (e) => {
+      if (e.target.classList.contains("win-close")) return;
+      if (moved) return; // это был драг, не клик
+      onHeaderClick();
+    });
+  }
 }
 
 setupWindowDrag(els.winOriginal);
 setupWindowDrag(els.winResult);
+setupWindowDrag(els.winBlocks, () => els.winBlocks.classList.toggle("collapsed"));
 
 for (const w of [els.winOriginal, els.winResult]) {
   w.querySelector(".win-close").addEventListener("click", () => {
@@ -347,11 +361,14 @@ function renderStage(objs) {
 }
 
 function renderWorkspace() {
-  // Сцена: объединённая сцена или свежий 3D-результат — на всё пространство
+  // Сцена на всё пространство зависит от вкладки:
+  // «Сцена» — объединённая композиция, «Картинка»/«.vox» — свежий 3D-результат
   let objs = null;
-  if (state.scene.length > 0) {
-    const m = mergedScene();
-    if (m && !m.error) objs = [m];
+  if (state.activeTab === "scene") {
+    if (state.scene.length > 0) {
+      const m = mergedScene();
+      if (m && !m.error) objs = [m];
+    }
   } else if (state.result && (state.result.relief || state.result.vox)) {
     objs = [resultAsObject(state.result)];
   }
@@ -378,10 +395,11 @@ function renderWorkspace() {
     placeWin(els.winOriginal, x, y);
   }
 
-  // Подсказка на пустой сцене
+  // Подсказка — только на пустой вкладке «Сцена» (когда стадия пуста)
   els.workspaceHint.hidden = !(
     state.activeTab === "scene" &&
-    state.scene.length === 0
+    state.scene.length === 0 &&
+    objs === null
   );
 }
 

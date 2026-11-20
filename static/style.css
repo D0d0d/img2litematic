@@ -158,6 +158,35 @@ main {
   line-height: 1.2;
 }
 
+.win-collapse {
+  color: #9aa0a6;
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.win.collapsed .win-collapse {
+  transform: rotate(-90deg);
+}
+
+.win.collapsed .win-body {
+  display: none;
+}
+
+#win-blocks {
+  right: 12px;
+  bottom: 12px;
+  width: 250px;
+}
+
+#win-blocks .win-body {
+  padding: 4px 6px;
+}
+
+#win-blocks #legend {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
 .win-body {
   padding: 6px;
 }

@@ -141,9 +141,6 @@
     <div id="stats" class="stats"></div>
     <div id="hover" class="hover"></div>
     <div id="error" class="error" hidden></div>
-
-    <h3>Блоки</h3>
-    <ul id="legend"></ul>
   </aside>
 
   <section class="workspace" id="workspace">
@@ -157,6 +154,11 @@
     <div class="win" id="win-result" hidden>
       <div class="win-header"><span>Пикселизация</span><button class="win-close" title="Закрыть">✕</button></div>
       <div class="win-body"><canvas id="result"></canvas></div>
+    </div>
+
+    <div class="win collapsed" id="win-blocks">
+      <div class="win-header"><span>Блоки</span><span class="win-collapse">▾</span></div>
+      <div class="win-body"><ul id="legend"></ul></div>
     </div>
 
     <div id="workspace-hint" hidden>Сцена пуста — добавьте объекты из вкладок «Картинка» или «.vox»</div>
