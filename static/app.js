@@ -6,22 +6,32 @@ const state = {
   file: null,
   fileUrl: null,
   voxFile: null,
-  kind: "image",   // "image" | "vox" — что загружали последним
-  result: null,    // ответ convert/vox
+  kind: "image",      // "image" | "vox" — что загружали последним
+  result: null,       // ответ convert/vox
   scale: 1,
-  viewer: null,    // интерактивный 3D-вьювер
-  scene: [],       // объекты сцены (композиция)
+  viewer: null,       // интерактивный 3D-вьювер
+  scene: [],          // объекты сцены (композиция)
+  selected: null,     // индекс выбранного объекта сцены
 };
 
 const els = {
+  tabs: [...document.querySelectorAll(".tab")],
+  contents: { image: $("tab-image"), vox: $("tab-vox"), scene: $("tab-scene") },
+
   file: $("file"),
   fileName: $("file-name"),
   voxfile: $("voxfile"),
   voxfileName: $("voxfile-name"),
+
   mode: $("mode"),
   k: $("k"),
   kValue: $("k-value"),
   kField: $("k-field"),
+  modeVox: $("mode-vox"),
+  kVox: $("k-vox"),
+  kValueVox: $("k-value-vox"),
+  kFieldVox: $("k-field-vox"),
+
   target: $("target"),
   dither: $("dither"),
   relief: $("relief"),
@@ -33,12 +43,27 @@ const els = {
   invert: $("invert"),
   baseblock: $("baseblock"),
   gridlines: $("gridlines"),
+  view3d: $("view3d"),
+  view3dField: $("view3d-field"),
+
   generate: $("generate"),
   addtoscene: $("addtoscene"),
-  clearscene: $("clearscene"),
-  scenePanel: $("scene-panel"),
-  sceneList: $("scene-list"),
   exportBtn: $("export"),
+  generateVox: $("generate-vox"),
+  addtosceneVox: $("addtoscene-vox"),
+  exportVox: $("export-vox"),
+
+  sceneList: $("scene-list"),
+  sceneEdit: $("scene-edit"),
+  sceneEditName: $("scene-edit-name"),
+  selX: $("sel-x"),
+  selY: $("sel-y"),
+  selZ: $("sel-z"),
+  selOverwrite: $("sel-overwrite"),
+  sceneDelete: $("scene-delete"),
+  clearscene: $("clearscene"),
+  exportscene: $("exportscene"),
+
   stats: $("stats"),
   hover: $("hover"),
   error: $("error"),
@@ -46,9 +71,18 @@ const els = {
   original: $("original"),
   result: $("result"),
   viewer3d: $("viewer3d"),
-  view3d: $("view3d"),
-  view3dField: $("view3d-field"),
 };
+
+// ---------- Вкладки ----------
+
+function switchTab(name) {
+  for (const t of els.tabs) t.classList.toggle("active", t.dataset.tab === name);
+  for (const [k, el] of Object.entries(els.contents)) el.hidden = k !== name;
+}
+
+els.tabs.forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+
+// ---------- Параметры и данные ----------
 
 function params() {
   return {
@@ -65,6 +99,28 @@ function params() {
   };
 }
 
+function voxParams() {
+  return { mode: els.modeVox.value, k: parseInt(els.kVox.value, 10) };
+}
+
+function imageFormData() {
+  const fd = new FormData();
+  fd.append("image", state.file);
+  fd.append("params", JSON.stringify(params()));
+  return fd;
+}
+
+function voxFormData() {
+  const fd = new FormData();
+  fd.append("vox", state.voxFile);
+  fd.append("params", JSON.stringify(voxParams()));
+  return fd;
+}
+
+function shortName(name) {
+  return name.startsWith("minecraft:") ? name.slice("minecraft:".length) : name;
+}
+
 function showError(msg) {
   els.error.textContent = msg;
   els.error.hidden = false;
@@ -74,21 +130,7 @@ function clearError() {
   els.error.hidden = true;
 }
 
-function formData() {
-  const fd = new FormData();
-  if (state.kind === "vox") {
-    fd.append("vox", state.voxFile);
-    fd.append("params", JSON.stringify({ mode: params().mode, k: params().k }));
-  } else {
-    fd.append("image", state.file);
-    fd.append("params", JSON.stringify(params()));
-  }
-  return fd;
-}
-
-function shortName(name) {
-  return name.startsWith("minecraft:") ? name.slice("minecraft:".length) : name;
-}
+// ---------- Превью 2D ----------
 
 function drawOriginal() {
   const img = new Image();
@@ -124,131 +166,9 @@ function drawGrid() {
   ctx.stroke();
 }
 
-function sceneObjects() {
-  // Сцена (несколько объектов) или один свежий результат relief/vox
-  if (state.scene.length > 0) return state.scene;
-  const r = state.result;
-  if (r && (r.relief || r.vox)) return [resultAsObject(r)];
-  return null;
-}
-
-function resultAsObject(r) {
-  let sx, sy, sz;
-  if (r.vox) {
-    sx = r.width; sy = r.height; sz = r.depth;
-  } else if (r.orientation === "vertical") {
-    sx = r.width; sy = r.height; sz = r.maxHeight;
-  } else {
-    sx = r.width; sy = r.maxHeight; sz = r.height;
-  }
-  const srcName = state.kind === "vox" ? state.voxFile.name : state.file.name;
-  return {
-    name: srcName,
-    gridB64: r.gridB64,
-    palette: r.palette,
-    width: sx,
-    height: sy,
-    depth: sz,
-    offset: [0, 0, 0],
-    overwrite: false,
-  };
-}
-
-function addToScene() {
-  const r = state.result;
-  if (!r || (!r.relief && !r.vox)) return;
-  const o = resultAsObject(r);
-  if (state.scene.length > 0) {
-    // по умолчанию — рядом с существующими объектами по оси X
-    const right = Math.max(...state.scene.map((s) => s.offset[0] + s.width));
-    o.offset = [right + 1, 0, 0];
-  }
-  state.scene.push(o);
-  renderScenePanel();
-  renderLegend();
-  renderResult();
-}
-
-function renderScenePanel() {
-  els.scenePanel.hidden = state.scene.length === 0;
-  els.sceneList.innerHTML = "";
-  const axes = ["X", "Y", "Z"];
-  state.scene.forEach((o, idx) => {
-    const row = document.createElement("div");
-    row.className = "scene-row";
-
-    const name = document.createElement("span");
-    name.className = "scene-name";
-    name.textContent = o.name.length > 14 ? o.name.slice(0, 13) + "…" : o.name;
-    row.appendChild(name);
-
-    for (let a = 0; a < 3; a++) {
-      const inp = document.createElement("input");
-      inp.type = "number";
-      inp.value = o.offset[a];
-      inp.title = `Смещение по ${axes[a]}`;
-      inp.addEventListener("change", () => {
-        o.offset[a] = parseInt(inp.value, 10) || 0;
-        renderResult();
-      });
-      row.appendChild(inp);
-    }
-
-    const lab = document.createElement("label");
-    lab.className = "checkbox scene-overwrite";
-    lab.title = "Вживление: air объекта не затирает блоки модели (иначе — затирает)";
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = !o.overwrite;
-    cb.addEventListener("change", () => {
-      o.overwrite = !cb.checked;
-    });
-    lab.append(cb, "вживить");
-    row.appendChild(lab);
-
-    const del = document.createElement("button");
-    del.textContent = "✕";
-    del.title = "Удалить из сцены";
-    del.addEventListener("click", () => {
-      state.scene.splice(idx, 1);
-      renderScenePanel();
-      renderLegend();
-      renderResult();
-    });
-    row.appendChild(del);
-
-    els.sceneList.appendChild(row);
-  });
-}
-
-function renderResult() {
-  const r = state.result;
+function drawProjection(r) {
+  // плоская затенённая проекция (relief/vox) или пиксельная сетка (2D)
   const c = els.result;
-
-  // сброс старого 3D-вьювера
-  if (state.viewer) {
-    state.viewer.dispose();
-    state.viewer = null;
-  }
-  els.viewer3d.replaceChildren();
-
-  // 3D-вьювер: сцена целиком или один свежий результат relief/vox
-  const objs = sceneObjects();
-  if (objs && els.view3d.checked) {
-    c.hidden = true;
-    els.viewer3d.hidden = false;
-    els.hover.textContent = "";
-    state.viewer = Viewer3D(els.viewer3d, objs);
-    if (state.viewer) return;
-    if (state.scene.length > 0) {
-      els.viewer3d.textContent = "WebGL недоступен — сцена не отображается";
-      return;
-    }
-  }
-  els.viewer3d.hidden = true;
-  c.hidden = false;
-
-  // масштаб отображения: целый множитель, без сглаживания
   const dispW = r.vox ? r.previewWidth : r.width;
   const dispH = r.vox ? r.previewHeight : r.height;
   const maxW = Math.min(760, window.innerWidth - 380);
@@ -280,7 +200,6 @@ function renderResult() {
   }
 
   if (r.relief || r.vox) {
-    // превью — затенённая проекция от сервера
     const img = new Image();
     img.onload = () => {
       ctx.imageSmoothingEnabled = false;
@@ -289,7 +208,6 @@ function renderResult() {
     };
     img.src = "data:image/png;base64," + r.preview;
   } else {
-    // offscreen-канвас: 1 пиксель = 1 блок
     const off = document.createElement("canvas");
     off.width = r.width;
     off.height = r.height;
@@ -308,6 +226,193 @@ function renderResult() {
     drawGrid();
   }
 }
+
+// ---------- Сцена ----------
+
+let mergedCache = null;
+
+function invalidateMerged() {
+  mergedCache = null;
+}
+
+function decodeGrid(o) {
+  if (!o._bytes) {
+    o._bytes = Uint8Array.from(atob(o.gridB64), (c) => c.charCodeAt(0));
+  }
+  return o._bytes;
+}
+
+function buildMerged() {
+  // WYSIWYG-слияние сцены по тем же правилам, что /api/compose
+  if (state.scene.length === 0) return null;
+  const minx = Math.min(...state.scene.map((o) => o.offset[0]));
+  const miny = Math.min(...state.scene.map((o) => o.offset[1]));
+  const minz = Math.min(...state.scene.map((o) => o.offset[2]));
+  const maxx = Math.max(...state.scene.map((o) => o.offset[0] + o.width));
+  const maxy = Math.max(...state.scene.map((o) => o.offset[1] + o.height));
+  const maxz = Math.max(...state.scene.map((o) => o.offset[2] + o.depth));
+  const sx = maxx - minx;
+  const sy = maxy - miny;
+  const sz = maxz - minz;
+  const volume = sx * sy * sz;
+  if (volume > 16_000_000) return { error: "Сцена слишком большая для превью" };
+
+  // объединённая палитра: air всегда индекс 0
+  const palette = [{ name: "minecraft:air", color: [205, 213, 219] }];
+  const byName = new Map([["minecraft:air", 0]]);
+  for (const o of state.scene) {
+    for (const p of o.palette) {
+      if (!byName.has(p.name)) {
+        byName.set(p.name, palette.length);
+        palette.push({ name: p.name, color: p.color });
+      }
+    }
+  }
+
+  const merged = new Uint8Array(volume).fill(0);
+  for (const o of state.scene) {
+    const bytes = decodeGrid(o);
+    const objAir = o.palette.findIndex((p) => p.name === "minecraft:air");
+    const map = o.palette.map((p) => byName.get(p.name));
+    for (let y = 0; y < o.height; y++) {
+      for (let z = 0; z < o.depth; z++) {
+        for (let x = 0; x < o.width; x++) {
+          const v = bytes[(y * o.depth + z) * o.width + x];
+          if (!o.overwrite && objAir >= 0 && v === objAir) continue; // вживление
+          const gx = x + o.offset[0] - minx;
+          const gy = y + o.offset[1] - miny;
+          const gz = z + o.offset[2] - minz;
+          merged[(gy * sz + gz) * sx + gx] = map[v];
+        }
+      }
+    }
+  }
+  return { gridBytes: merged, palette, width: sx, height: sy, depth: sz };
+}
+
+function mergedScene() {
+  if (mergedCache === null) mergedCache = buildMerged();
+  return mergedCache;
+}
+
+function resultAsObject(r) {
+  let sx, sy, sz;
+  if (r.vox) {
+    sx = r.width; sy = r.height; sz = r.depth;
+  } else if (r.orientation === "vertical") {
+    sx = r.width; sy = r.height; sz = r.maxHeight;
+  } else {
+    sx = r.width; sy = r.maxHeight; sz = r.height;
+  }
+  const srcName = state.kind === "vox" ? state.voxFile.name : state.file.name;
+  return {
+    name: srcName,
+    gridB64: r.gridB64,
+    palette: r.palette,
+    width: sx,
+    height: sy,
+    depth: sz,
+    offset: [0, 0, 0],
+    overwrite: false,
+  };
+}
+
+function addToScene() {
+  const r = state.result;
+  if (!r || (!r.relief && !r.vox)) return;
+  const o = resultAsObject(r);
+  if (state.scene.length > 0) {
+    const right = Math.max(...state.scene.map((s) => s.offset[0] + s.width));
+    o.offset = [right + 1, 0, 0];
+  }
+  state.scene.push(o);
+  state.selected = state.scene.length - 1;
+  invalidateMerged();
+  renderSceneUI();
+  renderResult();
+  renderLegend();
+  switchTab("scene");
+}
+
+function selectedObject() {
+  return state.selected !== null ? state.scene[state.selected] : null;
+}
+
+function renderSceneUI() {
+  const has = state.scene.length > 0;
+  els.sceneList.innerHTML = "";
+  els.sceneEdit.hidden = !has || state.selected === null;
+  els.clearscene.disabled = !has;
+  els.exportscene.disabled = !has;
+
+  state.scene.forEach((o, idx) => {
+    const row = document.createElement("div");
+    row.className = "scene-row" + (idx === state.selected ? " selected" : "");
+    const name = document.createElement("span");
+    name.className = "scene-name";
+    name.textContent = `${idx + 1}. ${o.name}`;
+    name.title = o.name;
+    const dims = document.createElement("span");
+    dims.className = "scene-dims";
+    dims.textContent = `${o.width}×${o.height}×${o.depth}`;
+    const state_ = document.createElement("span");
+    state_.className = "scene-mode";
+    state_.textContent = o.overwrite ? "затирает" : "вживление";
+    row.append(name, dims, state_);
+    row.addEventListener("click", () => {
+      state.selected = idx;
+      renderSceneUI();
+    });
+    els.sceneList.appendChild(row);
+  });
+
+  const o = selectedObject();
+  if (o) {
+    els.sceneEditName.textContent = `Объект ${state.selected + 1}: ${o.name}`;
+    els.selX.value = o.offset[0];
+    els.selY.value = o.offset[1];
+    els.selZ.value = o.offset[2];
+    els.selOverwrite.checked = !o.overwrite;
+  }
+}
+
+// ---------- Рендер результата ----------
+
+function renderResult() {
+  const r = state.result;
+  const c = els.result;
+  if (state.viewer) {
+    state.viewer.dispose();
+    state.viewer = null;
+  }
+  els.viewer3d.replaceChildren();
+
+  // 3D: сцена (WYSIWYG-слияние) или один свежий результат relief/vox
+  let objs = null;
+  if (state.scene.length > 0) {
+    const m = mergedScene();
+    if (m && !m.error) objs = [m];
+  } else if (r && (r.relief || r.vox)) {
+    objs = [resultAsObject(r)];
+  }
+
+  if (objs && els.view3d.checked) {
+    c.hidden = true;
+    els.viewer3d.hidden = false;
+    els.hover.textContent = "";
+    state.viewer = Viewer3D(els.viewer3d, objs);
+    if (state.viewer) return;
+    els.viewer3d.textContent = "WebGL недоступен — 3D-вид не отображается";
+    if (state.scene.length > 0) return;
+  }
+  els.viewer3d.hidden = true;
+  c.hidden = false;
+  if (!r) return;
+
+  drawProjection(r);
+}
+
+// ---------- Легенда и статистика ----------
 
 function renderLegendItems(entries, total) {
   els.legend.innerHTML = "";
@@ -329,22 +434,25 @@ function renderLegendItems(entries, total) {
 
 function renderLegend() {
   if (state.scene.length > 0) {
-    // агрегация палитр всех объектов сцены
-    const byName = new Map();
-    for (const o of state.scene) {
-      for (const p of o.palette) {
-        const e = byName.get(p.name) || { color: p.color, count: 0 };
-        e.count += p.count;
-        byName.set(p.name, e);
-      }
+    const m = mergedScene();
+    if (m && !m.error) {
+      const counts = new Array(m.palette.length).fill(0);
+      for (let i = 0; i < m.gridBytes.length; i++) counts[m.gridBytes[i]]++;
+      const entries = m.palette
+        .map((p, i) => ({ ...p, count: counts[i] }))
+        .filter((e) => e.count > 0)
+        .sort((a, b) => b.count - a.count);
+      const total = entries.reduce((s, e) => s + e.count, 0);
+      renderLegendItems(entries, total);
+      els.stats.textContent =
+        `Сцена: ${state.scene.length} объект(ов) · ${m.width}×${m.height}×${m.depth} · ` +
+        `${entries.length} типов блоков`;
+    } else {
+      els.legend.innerHTML = "";
+      els.stats.textContent = `Сцена: ${state.scene.length} объект(ов)`;
     }
-    const entries = [...byName.entries()].map(([name, e]) => ({ name, ...e }));
-    entries.sort((a, b) => b.count - a.count);
-    const total = entries.reduce((s, e) => s + e.count, 0);
-    renderLegendItems(entries, total);
-    els.stats.textContent = `Сцена: ${state.scene.length} объект(ов) · ${entries.length} типов блоков`;
     els.view3dField.hidden = false;
-    els.exportBtn.disabled = false;
+    els.exportscene.disabled = false;
     return;
   }
   const r = state.result;
@@ -358,27 +466,46 @@ function renderLegend() {
   els.stats.textContent =
     `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${vox}${dith}`;
   els.view3dField.hidden = !(r.relief || r.vox);
-  els.exportBtn.disabled = false;
 }
 
-async function generate() {
-  if (state.kind === "vox" && !state.voxFile) {
-    showError("Сначала выберите файл .vox.");
-    return;
+// ---------- Генерация ----------
+
+function clearResult() {
+  state.result = null;
+  if (state.viewer) {
+    state.viewer.dispose();
+    state.viewer = null;
   }
-  if (state.kind === "image" && !state.file) {
-    showError("Сначала выберите изображение.");
+  els.viewer3d.replaceChildren();
+  els.viewer3d.hidden = true;
+  const c = els.result;
+  c.hidden = false;
+  c.width = 0;
+  c.height = 0;
+  els.legend.innerHTML = "";
+  els.stats.textContent = "";
+  els.hover.textContent = "";
+  els.addtoscene.disabled = true;
+  els.addtosceneVox.disabled = true;
+  els.exportBtn.disabled = true;
+  els.exportVox.disabled = true;
+}
+
+async function generateImage() {
+  if (!state.file) {
+    showError("Сначала выберите изображение (вкладка «Картинка»).");
     return;
   }
   clearError();
   els.generate.disabled = true;
+  els.stats.textContent = "Генерация…";
   try {
-    const url = state.kind === "vox" ? "/api/vox" : "/api/convert";
-    const resp = await fetch(url, { method: "POST", body: formData() });
+    const resp = await fetch("/api/convert", { method: "POST", body: imageFormData() });
     const j = await resp.json();
     if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
     state.result = j;
     els.addtoscene.disabled = !(j.relief || j.vox);
+    els.exportBtn.disabled = false;
     renderResult();
     renderLegend();
   } catch (e) {
@@ -388,9 +515,85 @@ async function generate() {
   }
 }
 
-async function exportScene() {
+async function generateVox() {
+  if (!state.voxFile) {
+    showError("Сначала выберите файл .vox (вкладка «.vox»).");
+    return;
+  }
   clearError();
-  els.exportBtn.disabled = true;
+  els.generateVox.disabled = true;
+  els.stats.textContent = "Генерация…";
+  try {
+    const resp = await fetch("/api/vox", { method: "POST", body: voxFormData() });
+    const j = await resp.json();
+    if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
+    state.result = j;
+    els.addtosceneVox.disabled = false;
+    els.exportVox.disabled = false;
+    renderResult();
+    renderLegend();
+  } catch (e) {
+    showError(e.message || String(e));
+  } finally {
+    els.generateVox.disabled = false;
+  }
+}
+
+// ---------- Экспорт ----------
+
+async function downloadBlob(blob, name) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = name;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportFile() {
+  if (!state.result) return;
+  clearError();
+  if (state.kind === "vox") {
+    els.exportVox.disabled = true;
+    try {
+      const resp = await fetch("/api/export", { method: "POST", body: voxFormData() });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${resp.status}`);
+      }
+      await downloadBlob(
+        await resp.blob(),
+        (state.voxFile.name.replace(/\.[^.]+$/, "") || "model") + ".litematic"
+      );
+    } catch (e) {
+      showError(e.message || String(e));
+    } finally {
+      els.exportVox.disabled = false;
+    }
+  } else {
+    els.exportBtn.disabled = true;
+    try {
+      const resp = await fetch("/api/export", { method: "POST", body: imageFormData() });
+      if (!resp.ok) {
+        const j = await resp.json().catch(() => ({}));
+        throw new Error(j.error || `HTTP ${resp.status}`);
+      }
+      await downloadBlob(
+        await resp.blob(),
+        (state.file.name.replace(/\.[^.]+$/, "") || "schematic") + ".litematic"
+      );
+    } catch (e) {
+      showError(e.message || String(e));
+    } finally {
+      els.exportBtn.disabled = false;
+    }
+  }
+}
+
+async function exportScene() {
+  if (state.scene.length === 0) return;
+  clearError();
+  els.exportscene.disabled = true;
   try {
     const body = {
       objects: state.scene.map((o) => ({
@@ -412,62 +615,25 @@ async function exportScene() {
       const j = await resp.json().catch(() => ({}));
       throw new Error(j.error || `HTTP ${resp.status}`);
     }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "scene.litematic";
-    a.click();
-    URL.revokeObjectURL(url);
+    await downloadBlob(await resp.blob(), "scene.litematic");
   } catch (e) {
     showError(e.message || String(e));
   } finally {
-    els.exportBtn.disabled = false;
+    els.exportscene.disabled = false;
   }
 }
 
-async function exportFile() {
-  if (!state.result) return;
-  if (state.scene.length > 0) {
-    await exportScene();
-    return;
-  }
-  if (state.kind === "vox" && !state.voxFile) return;
-  if (state.kind === "image" && !state.file) return;
-  clearError();
-  els.exportBtn.disabled = true;
-  try {
-    const resp = await fetch("/api/export", { method: "POST", body: formData() });
-    if (!resp.ok) {
-      const j = await resp.json().catch(() => ({}));
-      throw new Error(j.error || `HTTP ${resp.status}`);
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    const srcName = state.kind === "vox" ? state.voxFile.name : state.file.name;
-    a.download = (srcName.replace(/\.[^.]+$/, "") || "schematic") + ".litematic";
-    a.click();
-    URL.revokeObjectURL(url);
-  } catch (e) {
-    showError(e.message || String(e));
-  } finally {
-    els.exportBtn.disabled = false;
-  }
-}
-
-function updateKField() {
-  const adaptive = els.mode.value === "adaptive";
-  els.kField.style.opacity = adaptive ? 1 : 0.4;
-  els.k.disabled = !adaptive;
-}
+// ---------- Слушатели ----------
 
 let debounceTimer = null;
 function autoGenerate() {
-  if (!state.result) return;
-  clearTimeout(debounceTimer);
-  debounceTimer = setTimeout(generate, 300);
+  if (state.kind === "vox" && state.voxFile) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(generateVox, 300);
+  } else if (state.kind === "image" && state.file) {
+    clearTimeout(debounceTimer);
+    debounceTimer = setTimeout(generateImage, 300);
+  }
 }
 
 els.file.addEventListener("change", () => {
@@ -478,8 +644,9 @@ els.file.addEventListener("change", () => {
   els.fileName.textContent = f.name;
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.fileUrl = URL.createObjectURL(f);
+  clearResult(); // не показываем превью предыдущего файла
   drawOriginal();
-  generate();
+  generateImage();
 });
 
 els.voxfile.addEventListener("change", () => {
@@ -488,7 +655,8 @@ els.voxfile.addEventListener("change", () => {
   state.kind = "vox";
   state.voxFile = f;
   els.voxfileName.textContent = f.name;
-  generate();
+  clearResult();
+  generateVox();
 });
 
 els.mode.addEventListener("change", () => {
@@ -518,21 +686,77 @@ els.baseblock.addEventListener("change", autoGenerate);
 for (const radio of document.querySelectorAll('input[name="orientation"]')) {
   radio.addEventListener("change", autoGenerate);
 }
+
+els.modeVox.addEventListener("change", () => {
+  updateKField();
+  autoGenerate();
+});
+els.kVox.addEventListener("input", () => {
+  els.kValueVox.textContent = els.kVox.value;
+  autoGenerate();
+});
+
 els.gridlines.addEventListener("change", () => {
   if (state.result) renderResult();
 });
 els.view3d.addEventListener("change", () => {
-  if (state.result) renderResult();
-});
-els.addtoscene.addEventListener("click", addToScene);
-els.clearscene.addEventListener("click", () => {
-  state.scene = [];
-  renderScenePanel();
-  renderLegend();
   renderResult();
 });
-els.generate.addEventListener("click", generate);
+
+els.generate.addEventListener("click", generateImage);
+els.generateVox.addEventListener("click", generateVox);
+els.addtoscene.addEventListener("click", addToScene);
+els.addtosceneVox.addEventListener("click", addToScene);
 els.exportBtn.addEventListener("click", exportFile);
+els.exportVox.addEventListener("click", exportFile);
+els.exportscene.addEventListener("click", exportScene);
+
+for (const [el, axis] of [[els.selX, 0], [els.selY, 1], [els.selZ, 2]]) {
+  el.addEventListener("change", () => {
+    const o = selectedObject();
+    if (!o) return;
+    o.offset[axis] = parseInt(el.value, 10) || 0;
+    invalidateMerged();
+    renderSceneUI();
+    renderResult();
+    renderLegend();
+  });
+}
+els.selOverwrite.addEventListener("change", () => {
+  const o = selectedObject();
+  if (!o) return;
+  o.overwrite = !els.selOverwrite.checked;
+  invalidateMerged();
+  renderSceneUI();
+  renderResult();
+  renderLegend();
+});
+els.sceneDelete.addEventListener("click", () => {
+  if (state.selected === null) return;
+  state.scene.splice(state.selected, 1);
+  state.selected = state.scene.length ? Math.min(state.selected, state.scene.length - 1) : null;
+  invalidateMerged();
+  renderSceneUI();
+  renderResult();
+  renderLegend();
+});
+els.clearscene.addEventListener("click", () => {
+  state.scene = [];
+  state.selected = null;
+  invalidateMerged();
+  renderSceneUI();
+  renderResult();
+  renderLegend();
+});
+
+function updateKField() {
+  const adaptive = els.mode.value === "adaptive";
+  els.kField.style.opacity = adaptive ? 1 : 0.4;
+  els.k.disabled = !adaptive;
+  const adaptiveVox = els.modeVox.value === "adaptive";
+  els.kFieldVox.style.opacity = adaptiveVox ? 1 : 0.4;
+  els.kVox.disabled = !adaptiveVox;
+}
 
 async function initBaseBlocks() {
   try {
@@ -546,7 +770,7 @@ async function initBaseBlocks() {
     }
     els.baseblock.value = "minecraft:stone";
   } catch (e) {
-    /* некритично: при пустом списке параметр проигнорируется */
+    /* некритично */
   }
 }
 

@@ -9,82 +9,138 @@
 <body>
 <header>
   <h1>img2litematic</h1>
-  <span class="subtitle">картинка → .litematic (2D)</span>
+  <span class="subtitle">картинка → .litematic (2D / 3D)</span>
 </header>
 
 <main>
   <aside class="panel">
-    <label class="file-label">
-      <input type="file" id="file" accept="image/*">
-      <span id="file-name">Выберите изображение…</span>
-    </label>
-
-    <label class="file-label">
-      <input type="file" id="voxfile" accept=".vox">
-      <span id="voxfile-name">Или модель .vox (MagicaVoxel)…</span>
-    </label>
-
-    <div class="field">
-      <label for="mode">Режим подбора блоков</label>
-      <select id="mode">
-        <option value="adaptive" selected>Адаптивный (k-means)</option>
-        <option value="palette">Полная палитра</option>
-      </select>
-    </div>
-
-    <div class="field" id="k-field">
-      <label for="k">Число блоков K: <b id="k-value">16</b></label>
-      <input type="range" id="k" min="2" max="64" step="1" value="16">
-    </div>
-
-    <div class="field">
-      <label>Ориентация</label>
-      <label class="radio"><input type="radio" name="orientation" value="vertical" checked> Вертикальная картина</label>
-      <label class="radio"><input type="radio" name="orientation" value="floor"> Ковёр на полу</label>
-    </div>
-
-    <div class="field">
-      <label for="target">Макс. сторона (блоки)</label>
-      <input type="number" id="target" min="16" max="512" step="1" value="128">
-    </div>
-
-    <div class="field">
-      <label class="checkbox"><input type="checkbox" id="dither"> Дизеринг (Floyd–Steinberg)</label>
-    </div>
-
-    <div class="field">
-      <label class="checkbox"><input type="checkbox" id="relief"> Рельеф (3D)</label>
-    </div>
-
-    <div id="relief-fields" hidden>
-      <div class="field">
-        <label for="maxheight">Макс. глубина/высота: <b id="maxheight-value">8</b></label>
-        <input type="range" id="maxheight" min="1" max="64" step="1" value="8">
-      </div>
-      <div class="field">
-        <label for="smoothing">Сглаживание: <b id="smoothing-value">2</b></label>
-        <input type="range" id="smoothing" min="0" max="16" step="0.5" value="2">
-      </div>
-      <div class="field">
-        <label class="checkbox"><input type="checkbox" id="invert"> Инвертировать яркость</label>
-      </div>
-      <div class="field">
-        <label for="baseblock">Блок основания</label>
-        <select id="baseblock"></select>
-      </div>
+    <div class="tab-bar">
+      <button class="tab active" data-tab="image">Картинка</button>
+      <button class="tab" data-tab="vox">.vox</button>
+      <button class="tab" data-tab="scene">Сцена</button>
     </div>
 
     <div class="field" id="view3d-field" hidden>
       <label class="checkbox"><input type="checkbox" id="view3d" checked> 3D-вид (вращение мышью)</label>
     </div>
 
-    <div class="field">
-      <label class="checkbox"><input type="checkbox" id="gridlines" checked> Сетка на превью</label>
-    </div>
+    <section class="tab-content" id="tab-image">
+      <label class="file-label">
+        <input type="file" id="file" accept="image/*">
+        <span id="file-name">Выберите изображение…</span>
+      </label>
 
-    <button id="generate" class="primary">Сгенерировать</button>
-    <button id="addtoscene" disabled>Добавить в сцену</button>
-    <button id="export" disabled>Скачать .litematic</button>
+      <div class="field">
+        <label for="mode">Режим подбора блоков</label>
+        <select id="mode">
+          <option value="adaptive" selected>Адаптивный (k-means)</option>
+          <option value="palette">Полная палитра</option>
+        </select>
+      </div>
+
+      <div class="field" id="k-field">
+        <label for="k">Число блоков K: <b id="k-value">16</b></label>
+        <input type="range" id="k" min="2" max="64" step="1" value="16">
+      </div>
+
+      <div class="field">
+        <label>Ориентация</label>
+        <label class="radio"><input type="radio" name="orientation" value="vertical" checked> Вертикальная картина</label>
+        <label class="radio"><input type="radio" name="orientation" value="floor"> Ковёр на полу</label>
+      </div>
+
+      <div class="field">
+        <label for="target">Макс. сторона (блоки)</label>
+        <input type="number" id="target" min="16" max="512" step="1" value="128">
+      </div>
+
+      <div class="field">
+        <label class="checkbox"><input type="checkbox" id="dither"> Дизеринг (Floyd–Steinberg)</label>
+      </div>
+
+      <div class="field">
+        <label class="checkbox"><input type="checkbox" id="relief"> Рельеф (3D)</label>
+      </div>
+
+      <div id="relief-fields" hidden>
+        <div class="field">
+          <label for="maxheight">Макс. глубина/высота: <b id="maxheight-value">8</b></label>
+          <input type="range" id="maxheight" min="1" max="64" step="1" value="8">
+        </div>
+        <div class="field">
+          <label for="smoothing">Сглаживание: <b id="smoothing-value">2</b></label>
+          <input type="range" id="smoothing" min="0" max="16" step="0.5" value="2">
+        </div>
+        <div class="field">
+          <label class="checkbox"><input type="checkbox" id="invert"> Инвертировать яркость</label>
+        </div>
+        <div class="field">
+          <label for="baseblock">Блок основания</label>
+          <select id="baseblock"></select>
+        </div>
+      </div>
+
+      <div class="field">
+        <label class="checkbox"><input type="checkbox" id="gridlines" checked> Сетка на превью (2D)</label>
+      </div>
+
+      <button id="generate" class="primary">Сгенерировать</button>
+      <button id="addtoscene" disabled>Добавить в сцену</button>
+      <button id="export" disabled>Скачать .litematic</button>
+    </section>
+
+    <section class="tab-content" id="tab-vox" hidden>
+      <label class="file-label">
+        <input type="file" id="voxfile" accept=".vox">
+        <span id="voxfile-name">Выберите модель .vox (MagicaVoxel)…</span>
+      </label>
+
+      <div class="field">
+        <label for="mode-vox">Режим подбора блоков</label>
+        <select id="mode-vox">
+          <option value="adaptive" selected>Адаптивный (k-means)</option>
+          <option value="palette">Полная палитра</option>
+        </select>
+      </div>
+
+      <div class="field" id="k-field-vox">
+        <label for="k-vox">Число блоков K: <b id="k-value-vox">16</b></label>
+        <input type="range" id="k-vox" min="2" max="64" step="1" value="16">
+      </div>
+
+      <button id="generate-vox" class="primary">Сгенерировать</button>
+      <button id="addtoscene-vox" disabled>Добавить в сцену</button>
+      <button id="export-vox" disabled>Скачать .litematic</button>
+    </section>
+
+    <section class="tab-content" id="tab-scene" hidden>
+      <div class="field">
+        <label>Объекты сцены (клик — выбрать)</label>
+        <div id="scene-list"></div>
+      </div>
+
+      <div id="scene-edit" hidden>
+        <h4 id="scene-edit-name"></h4>
+        <div class="field">
+          <label>Смещение</label>
+          <div class="offsets">
+            <input type="number" id="sel-x" title="X">
+            <input type="number" id="sel-y" title="Y">
+            <input type="number" id="sel-z" title="Z">
+          </div>
+        </div>
+        <div class="field">
+          <label class="checkbox" id="sel-overwrite-label">
+            <input type="checkbox" id="sel-overwrite" checked>
+            Вживить (air не затирает блоки модели)
+          </label>
+        </div>
+        <button id="scene-delete">Удалить объект</button>
+      </div>
+
+      <button id="clearscene">Очистить сцену</button>
+      <button id="exportscene" class="primary" disabled>Скачать сцену (.litematic)</button>
+    </section>
 
     <div id="stats" class="stats"></div>
     <div id="hover" class="hover"></div>
@@ -92,12 +148,6 @@
 
     <h3>Блоки</h3>
     <ul id="legend"></ul>
-
-    <div id="scene-panel" hidden>
-      <h3>Сцена</h3>
-      <div id="scene-list"></div>
-      <button id="clearscene">Очистить сцену</button>
-    </div>
   </aside>
 
   <section class="preview">

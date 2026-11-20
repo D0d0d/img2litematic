@@ -55,6 +55,41 @@ main {
   color: #9aa0a6;
 }
 
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: #1b1d21;
+  border: 1px solid #34383e;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #9aa0a6;
+}
+
+.tab:hover {
+  background: #2a2d33;
+}
+
+.tab.active {
+  background: #2f6f4f;
+  border-color: transparent;
+  color: #fff;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .preview {
   flex: 1;
   display: flex;
@@ -209,12 +244,31 @@ button.primary:hover:not(:disabled) {
   flex: 0 0 16px;
 }
 
+#scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .scene-row {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 8px;
   font-size: 12px;
-  margin-bottom: 6px;
+  padding: 6px 8px;
+  border: 1px solid #34383e;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #1b1d21;
+}
+
+.scene-row:hover {
+  border-color: #4a6f5a;
+}
+
+.scene-row.selected {
+  border-color: #3c8a63;
+  background: #24302a;
 }
 
 .scene-name {
@@ -223,24 +277,42 @@ button.primary:hover:not(:disabled) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: #9aa0a6;
+  color: #c8ccd0;
 }
 
-.scene-row input[type="number"] {
-  width: 42px;
-  padding: 3px 4px;
-  font-size: 12px;
-}
-
-.scene-row button {
-  padding: 3px 6px;
-  font-size: 12px;
-}
-
-.scene-overwrite {
-  font-size: 11px;
+.scene-dims {
   color: #9aa0a6;
   white-space: nowrap;
+}
+
+.scene-mode {
+  color: #7c9a88;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.offsets {
+  display: flex;
+  gap: 4px;
+}
+
+.offsets input {
+  flex: 1;
+  min-width: 0;
+}
+
+#scene-edit h4 {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #c8ccd0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#sel-overwrite-label {
+  align-items: flex-start;
+  line-height: 1.35;
 }
 
 .bname {

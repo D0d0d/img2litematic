@@ -46,7 +46,7 @@ function Viewer3D(container, objects) {
 
   // По одному InstancedMesh на объект, air пропускается
   for (const o of objects) {
-    const bytes = Uint8Array.from(atob(o.gridB64), (c) => c.charCodeAt(0));
+    const bytes = o.gridBytes || Uint8Array.from(atob(o.gridB64), (c) => c.charCodeAt(0));
     const airIdx = o.palette.findIndex((p) => p.name === "minecraft:air");
     const [ox, oy, oz] = o.offset || [0, 0, 0];
     const w = o.width, h = o.height, d = o.depth;
