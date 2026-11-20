@@ -9,116 +9,120 @@
 <body>
 <header>
   <h1>img2litematic</h1>
-  <span class="subtitle">картинка → .litematic (2D / 3D)</span>
+  <span class="subtitle">image → .litematic (2D / 3D)</span>
+  <select id="lang" class="lang-select" title="Language / Язык">
+    <option value="ru">Русский</option>
+    <option value="en">English</option>
+  </select>
 </header>
 
 <main>
   <aside class="panel">
     <div class="tab-bar">
-      <button class="tab active" data-tab="image">Картинка</button>
-      <button class="tab" data-tab="vox">.vox</button>
-      <button class="tab" data-tab="scene">Сцена</button>
+      <button class="tab active" data-tab="image" data-i18n="tab.image">Картинка</button>
+      <button class="tab" data-tab="vox" data-i18n="tab.vox">.vox</button>
+      <button class="tab" data-tab="scene" data-i18n="tab.scene">Сцена</button>
     </div>
 
     <section class="tab-content" id="tab-image">
       <label class="file-label">
         <input type="file" id="file" accept="image/*">
-        <span id="file-name">Выберите изображение…</span>
+        <span id="file-name" data-i18n="file.choose">Выберите изображение…</span>
       </label>
 
       <div class="field">
-        <label for="mode">Режим подбора блоков</label>
+        <label for="mode" data-i18n="mode.label">Режим подбора блоков</label>
         <select id="mode">
-          <option value="adaptive" selected>Адаптивный (k-means)</option>
-          <option value="palette">Полная палитра</option>
+          <option value="adaptive" selected data-i18n="mode.adaptive">Адаптивный (k-means)</option>
+          <option value="palette" data-i18n="mode.palette">Полная палитра</option>
         </select>
       </div>
 
       <div class="field" id="k-field">
-        <label for="k">Число блоков K: <b id="k-value">16</b></label>
+        <label for="k"><span data-i18n="k.label">Число блоков K:</span> <b id="k-value">16</b></label>
         <input type="range" id="k" min="2" max="64" step="1" value="16">
       </div>
 
       <div class="field">
-        <label>Ориентация</label>
-        <label class="radio"><input type="radio" name="orientation" value="vertical" checked> Вертикальная картина</label>
-        <label class="radio"><input type="radio" name="orientation" value="floor"> Ковёр на полу</label>
+        <label data-i18n="orientation.label">Ориентация</label>
+        <label class="radio"><input type="radio" name="orientation" value="vertical" checked> <span data-i18n="orientation.vertical">Вертикальная картина</span></label>
+        <label class="radio"><input type="radio" name="orientation" value="floor"> <span data-i18n="orientation.floor">Ковёр на полу</span></label>
       </div>
 
       <div class="field">
-        <label for="target">Макс. сторона (блоки)</label>
+        <label for="target" data-i18n="target.label">Макс. сторона (блоки)</label>
         <input type="number" id="target" min="16" max="512" step="1" value="128">
       </div>
 
       <div class="field">
-        <label class="checkbox"><input type="checkbox" id="dither"> Дизеринг (Floyd–Steinberg)</label>
+        <label class="checkbox"><input type="checkbox" id="dither"> <span data-i18n="dither">Дизеринг (Floyd–Steinberg)</span></label>
       </div>
 
       <div class="field">
-        <label class="checkbox"><input type="checkbox" id="relief"> Рельеф (3D)</label>
+        <label class="checkbox"><input type="checkbox" id="relief"> <span data-i18n="relief">Рельеф (3D)</span></label>
       </div>
 
       <div id="relief-fields" hidden>
         <div class="field">
-          <label for="maxheight">Макс. глубина/высота: <b id="maxheight-value">8</b></label>
+          <label for="maxheight"><span data-i18n="maxheight.label">Макс. глубина/высота:</span> <b id="maxheight-value">8</b></label>
           <input type="range" id="maxheight" min="1" max="64" step="1" value="8">
         </div>
         <div class="field">
-          <label for="smoothing">Сглаживание: <b id="smoothing-value">2</b></label>
+          <label for="smoothing"><span data-i18n="smoothing.label">Сглаживание:</span> <b id="smoothing-value">2</b></label>
           <input type="range" id="smoothing" min="0" max="16" step="0.5" value="2">
         </div>
         <div class="field">
-          <label class="checkbox"><input type="checkbox" id="invert"> Инвертировать яркость</label>
+          <label class="checkbox"><input type="checkbox" id="invert"> <span data-i18n="invert">Инвертировать яркость</span></label>
         </div>
         <div class="field">
-          <label for="baseblock">Блок основания</label>
+          <label for="baseblock" data-i18n="baseblock.label">Блок основания</label>
           <select id="baseblock"></select>
         </div>
       </div>
 
       <div class="field">
-        <label class="checkbox"><input type="checkbox" id="gridlines" checked> Сетка на превью (2D)</label>
+        <label class="checkbox"><input type="checkbox" id="gridlines" checked> <span data-i18n="gridlines">Сетка на превью (2D)</span></label>
       </div>
 
-      <button id="generate" class="primary">Сгенерировать</button>
-      <button id="addtoscene" disabled>Добавить в сцену</button>
-      <button id="export" disabled>Скачать .litematic</button>
+      <button id="generate" class="primary" data-i18n="generate">Сгенерировать</button>
+      <button id="addtoscene" disabled data-i18n="addtoscene">Добавить в сцену</button>
+      <button id="export" disabled data-i18n="download">Скачать .litematic</button>
     </section>
 
     <section class="tab-content" id="tab-vox" hidden>
       <label class="file-label">
         <input type="file" id="voxfile" accept=".vox">
-        <span id="voxfile-name">Выберите модель .vox (MagicaVoxel)…</span>
+        <span id="voxfile-name" data-i18n="voxfile.choose">Выберите модель .vox (MagicaVoxel)…</span>
       </label>
 
       <div class="field">
-        <label for="mode-vox">Режим подбора блоков</label>
+        <label for="mode-vox" data-i18n="mode.label">Режим подбора блоков</label>
         <select id="mode-vox">
-          <option value="adaptive" selected>Адаптивный (k-means)</option>
-          <option value="palette">Полная палитра</option>
+          <option value="adaptive" selected data-i18n="mode.adaptive">Адаптивный (k-means)</option>
+          <option value="palette" data-i18n="mode.palette">Полная палитра</option>
         </select>
       </div>
 
       <div class="field" id="k-field-vox">
-        <label for="k-vox">Число блоков K: <b id="k-value-vox">16</b></label>
+        <label for="k-vox"><span data-i18n="k.label">Число блоков K:</span> <b id="k-value-vox">16</b></label>
         <input type="range" id="k-vox" min="2" max="64" step="1" value="16">
       </div>
 
-      <button id="generate-vox" class="primary">Сгенерировать</button>
-      <button id="addtoscene-vox" disabled>Добавить в сцену</button>
-      <button id="export-vox" disabled>Скачать .litematic</button>
+      <button id="generate-vox" class="primary" data-i18n="generate">Сгенерировать</button>
+      <button id="addtoscene-vox" disabled data-i18n="addtoscene">Добавить в сцену</button>
+      <button id="export-vox" disabled data-i18n="download">Скачать .litematic</button>
     </section>
 
     <section class="tab-content" id="tab-scene" hidden>
       <div class="field">
-        <label>Объекты сцены (клик — выбрать)</label>
+        <label data-i18n="scene.objects">Объекты сцены (клик — выбрать)</label>
         <div id="scene-list"></div>
       </div>
 
       <div id="scene-edit" hidden>
         <h4 id="scene-edit-name"></h4>
         <div class="field">
-          <label>Смещение</label>
+          <label data-i18n="scene.edit.offset">Смещение</label>
           <div class="offsets">
             <input type="number" id="sel-x" title="X">
             <input type="number" id="sel-y" title="Y">
@@ -128,14 +132,15 @@
         <div class="field">
           <label class="checkbox" id="sel-overwrite-label">
             <input type="checkbox" id="sel-overwrite" checked>
-            Вживить (air не затирает блоки модели)
+            <span data-i18n="scene.embed">Вживить (air не затирает блоки модели)</span>
           </label>
         </div>
-        <button id="scene-delete">Удалить объект</button>
+        <button id="reconfigure" data-i18n="scene.reconfigure">Перенастроить (рельеф)</button>
+        <button id="scene-delete" data-i18n="scene.delete">Удалить объект</button>
       </div>
 
-      <button id="clearscene">Очистить сцену</button>
-      <button id="exportscene" class="primary" disabled>Скачать сцену (.litematic)</button>
+      <button id="clearscene" data-i18n="scene.clear">Очистить сцену</button>
+      <button id="exportscene" class="primary" disabled data-i18n="scene.download">Скачать сцену (.litematic)</button>
     </section>
 
     <div id="stats" class="stats"></div>
@@ -147,26 +152,33 @@
     <div id="stage" hidden></div>
 
     <div class="win" id="win-original" hidden>
-      <div class="win-header"><span>Оригинал</span><button class="win-close" title="Закрыть">✕</button></div>
+      <div class="win-header">
+        <span data-i18n="win.original">Оригинал</span>
+        <button class="win-close" data-i18n-title="win.close" title="Закрыть">✕</button>
+      </div>
       <div class="win-body"><canvas id="original"></canvas></div>
     </div>
 
     <div class="win" id="win-result" hidden>
-      <div class="win-header"><span>Пикселизация</span><button class="win-close" title="Закрыть">✕</button></div>
+      <div class="win-header">
+        <span data-i18n="win.result">Пикселизация</span>
+        <button class="win-close" data-i18n-title="win.close" title="Закрыть">✕</button>
+      </div>
       <div class="win-body"><canvas id="result"></canvas></div>
     </div>
 
     <div class="win collapsed" id="win-blocks">
-      <div class="win-header"><span>Блоки</span><span class="win-collapse">▾</span></div>
+      <div class="win-header"><span data-i18n="win.blocks">Блоки</span><span class="win-collapse">▾</span></div>
       <div class="win-body"><ul id="legend"></ul></div>
     </div>
 
-    <div id="workspace-hint" hidden>Сцена пуста — добавьте объекты из вкладок «Картинка» или «.vox»</div>
+    <div id="workspace-hint" data-i18n="scene.empty.hint" hidden>Сцена пуста — добавьте объекты из вкладок «Картинка» или «.vox»</div>
   </section>
 </main>
 
 <script src="vendor/three.min.js"></script>
 <script src="viewer3d.js"></script>
+<script src="i18n.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ const state = {
   viewer: null,       // 3D-вьювер сцены
   scene: [],          // объекты сцены (композиция)
   selected: null,     // индекс выбранного объекта сцены
+  reconfiguring: null,// индекс объекта сцены, который перенастраивается
   activeTab: "image",
   winClosed: { original: false, result: false },
 };
@@ -22,7 +23,9 @@ const els = {
   stage: $("stage"),
   winOriginal: $("win-original"),
   winResult: $("win-result"),
+  winBlocks: $("win-blocks"),
   workspaceHint: $("workspace-hint"),
+  lang: $("lang"),
 
   file: $("file"),
   fileName: $("file-name"),
@@ -64,6 +67,7 @@ const els = {
   selY: $("sel-y"),
   selZ: $("sel-z"),
   selOverwrite: $("sel-overwrite"),
+  reconfigure: $("reconfigure"),
   sceneDelete: $("scene-delete"),
   clearscene: $("clearscene"),
   exportscene: $("exportscene"),
@@ -74,10 +78,9 @@ const els = {
   legend: $("legend"),
   original: $("original"),
   result: $("result"),
-  winBlocks: $("win-blocks"),
 };
 
-// ---------- Вкладки ----------
+// ---------- Вкладки и язык ----------
 
 function switchTab(name) {
   state.activeTab = name;
@@ -89,6 +92,7 @@ function switchTab(name) {
 }
 
 els.tabs.forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
+els.lang.addEventListener("change", () => setLang(els.lang.value));
 
 // ---------- Параметры и данные ----------
 
@@ -105,6 +109,24 @@ function params() {
     invert: els.invert.checked,
     base_block: els.baseblock.value,
   };
+}
+
+function applyParamsToControls(p) {
+  els.mode.value = p.mode;
+  els.k.value = p.k;
+  els.kValue.textContent = p.k;
+  document.querySelector(`input[name="orientation"][value="${p.orientation}"]`).checked = true;
+  els.target.value = p.target;
+  els.dither.checked = !!p.dither;
+  els.relief.checked = !!p.relief;
+  els.reliefFields.hidden = !p.relief;
+  els.maxheight.value = p.max_height;
+  els.maxheightValue.textContent = p.max_height;
+  els.smoothing.value = p.smoothing;
+  els.smoothingValue.textContent = p.smoothing;
+  els.invert.checked = !!p.invert;
+  els.baseblock.value = p.base_block;
+  updateKField();
 }
 
 function voxParams() {
@@ -223,7 +245,6 @@ function drawOriginalInto(canvas, url) {
 }
 
 function drawResultInto(canvas, data) {
-  // data: {width, height, preview?, previewW?, previewH?, grid?, surfaceGrid?, palette?, isVox}
   canvas.onmousemove = null;
   els.hover.textContent = "";
   const dispW = data.previewW || data.width;
@@ -356,7 +377,7 @@ function renderStage(objs) {
   els.stage.hidden = false;
   state.viewer = Viewer3D(els.stage, objs);
   if (!state.viewer) {
-    els.stage.textContent = "WebGL недоступен — 3D-вид не отображается";
+    els.stage.textContent = t("webgl.unavailable");
   }
 }
 
@@ -430,7 +451,7 @@ function buildMerged() {
   const sy = maxy - miny;
   const sz = maxz - minz;
   const volume = sx * sy * sz;
-  if (volume > 16_000_000) return { error: "Сцена слишком большая для превью" };
+  if (volume > 16_000_000) return { error: true };
 
   const palette = [{ name: "minecraft:air", color: [205, 213, 219] }];
   const byName = new Map([["minecraft:air", 0]]);
@@ -494,6 +515,7 @@ function resultAsObject(r) {
     surfaceGrid: r.surfaceGrid || null,
     originalUrl: state.kind === "image" ? state.fileUrl : null,
     isVox: !!r.vox,
+    params: state.kind === "vox" ? { ...voxParams(), vox: true } : params(),
   };
 }
 
@@ -537,7 +559,7 @@ function renderSceneUI() {
     dims.textContent = `${o.width}×${o.height}×${o.depth}`;
     const mode_ = document.createElement("span");
     mode_.className = "scene-mode";
-    mode_.textContent = o.overwrite ? "затирает" : "вживление";
+    mode_.textContent = o.overwrite ? t("scene.mode.overwrite") : t("scene.mode.embed");
     row.append(name, dims, mode_);
     row.addEventListener("click", () => {
       state.selected = idx;
@@ -550,12 +572,34 @@ function renderSceneUI() {
 
   const o = selectedObject();
   if (o) {
-    els.sceneEditName.textContent = `Объект ${state.selected + 1}: ${o.name}`;
+    els.sceneEditName.textContent = t("scene.edit.title", { n: state.selected + 1, name: o.name });
     els.selX.value = o.offset[0];
     els.selY.value = o.offset[1];
     els.selZ.value = o.offset[2];
     els.selOverwrite.checked = !o.overwrite;
+    // перенастройка доступна только для объектов, созданных из картинки
+    els.reconfigure.hidden = !(o.originalUrl && !o.isVox);
   }
+}
+
+function reconfigureSelected() {
+  const o = selectedObject();
+  if (!o || !o.originalUrl || o.isVox) return;
+  applyParamsToControls(o.params);
+  els.stats.textContent = t("reconfigure.hint");
+  fetch(o.originalUrl)
+    .then((resp) => resp.blob())
+    .then((blob) => {
+      const f = new File([blob], o.name);
+      state.kind = "image";
+      state.file = f;
+      // URL объекта остаётся живым — не пересоздаём и не revoke
+      state.fileUrl = o.originalUrl;
+      els.fileName.textContent = o.name;
+      state.reconfiguring = state.selected;
+      switchTab("image");
+    })
+    .catch((e) => showError(String(e)));
 }
 
 // ---------- Легенда и статистика ----------
@@ -590,12 +634,16 @@ function renderLegend() {
         .sort((a, b) => b.count - a.count);
       const total = entries.reduce((s, e) => s + e.count, 0);
       renderLegendItems(entries, total);
-      els.stats.textContent =
-        `Сцена: ${state.scene.length} объект(ов) · ${m.width}×${m.height}×${m.depth} · ` +
-        `${entries.length} типов блоков`;
+      els.stats.textContent = t("scene.stats", {
+        n: state.scene.length,
+        w: m.width,
+        h: m.height,
+        d: m.depth,
+        b: entries.length,
+      });
     } else {
       els.legend.innerHTML = "";
-      els.stats.textContent = `Сцена: ${state.scene.length} объект(ов)`;
+      els.stats.textContent = t("scene.too_big");
     }
     els.exportscene.disabled = false;
     return;
@@ -608,19 +656,28 @@ function renderLegend() {
   }
   const total = r.stats.totalBlocks;
   renderLegendItems(r.palette, total);
-  const orient = r.vox ? "" : r.orientation === "vertical" ? "вертикальная · " : "ковёр · ";
-  const mode = r.mode === "adaptive" ? `адаптивный (K=${r.kRequested})` : "полная палитра";
-  const dith = r.dither ? " · дизеринг" : "";
-  const rel = r.relief ? ` · рельеф H=${r.maxHeight}` : "";
-  const vox = r.vox ? ` · vox ${r.width}×${r.height}×${r.depth}` : "";
+  const orient = r.vox
+    ? ""
+    : r.orientation === "vertical"
+      ? t("stats.orient.vertical") + " · "
+      : t("stats.orient.floor") + " · ";
+  const mode =
+    r.mode === "adaptive"
+      ? t("stats.mode.adaptive", { k: r.kRequested })
+      : t("stats.mode.palette");
+  const dith = r.dither ? t("stats.dither") : "";
+  const rel = r.relief ? t("stats.relief", { h: r.maxHeight }) : "";
+  const vox = r.vox ? t("stats.vox", { w: r.width, h: r.height, d: r.depth }) : "";
   els.stats.textContent =
-    `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${vox}${dith}`;
+    `${r.width}×${r.height} · ${t("stats.blocks.count", { k: r.effectiveK })} · ${mode} · ` +
+    `${orient}${rel}${vox}${dith}`;
 }
 
 // ---------- Генерация ----------
 
 function clearResult() {
   state.result = null;
+  state.reconfiguring = null;
   if (state.viewer) {
     state.viewer.dispose();
     state.viewer = null;
@@ -641,19 +698,38 @@ function clearResult() {
 
 async function generateImage() {
   if (!state.file) {
-    showError("Сначала выберите изображение (вкладка «Картинка»).");
+    showError(t("err.no_image"));
     return;
   }
   clearError();
   els.generate.disabled = true;
-  els.stats.textContent = "Генерация…";
+  els.stats.textContent = t("gen.progress");
   try {
     const resp = await fetch("/api/convert", { method: "POST", body: imageFormData() });
     const j = await resp.json();
-    if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(apiErrorText(j));
     state.result = j;
     els.addtoscene.disabled = !(j.relief || j.vox);
     els.exportBtn.disabled = false;
+
+    // перенастройка объекта сцены: заменяем его свежим результатом
+    if (state.reconfiguring !== null && state.reconfiguring < state.scene.length) {
+      const idx = state.reconfiguring;
+      const old = state.scene[idx];
+      const fresh = resultAsObject(j);
+      state.scene[idx] = {
+        ...fresh,
+        offset: old.offset,
+        overwrite: old.overwrite,
+        name: old.name,
+        originalUrl: old.originalUrl,
+        params: params(),
+      };
+      state.selected = idx;
+      invalidateMerged();
+      renderSceneUI();
+    }
+
     resetWindows();
     renderWorkspace();
     renderLegend();
@@ -666,16 +742,16 @@ async function generateImage() {
 
 async function generateVox() {
   if (!state.voxFile) {
-    showError("Сначала выберите файл .vox (вкладка «.vox»).");
+    showError(t("err.no_vox"));
     return;
   }
   clearError();
   els.generateVox.disabled = true;
-  els.stats.textContent = "Генерация…";
+  els.stats.textContent = t("gen.progress");
   try {
     const resp = await fetch("/api/vox", { method: "POST", body: voxFormData() });
     const j = await resp.json();
-    if (!resp.ok) throw new Error(j.error || `HTTP ${resp.status}`);
+    if (!resp.ok) throw new Error(apiErrorText(j));
     state.result = j;
     els.addtosceneVox.disabled = false;
     els.exportVox.disabled = false;
@@ -709,7 +785,7 @@ async function exportFile() {
       const resp = await fetch("/api/export", { method: "POST", body: voxFormData() });
       if (!resp.ok) {
         const j = await resp.json().catch(() => ({}));
-        throw new Error(j.error || `HTTP ${resp.status}`);
+        throw new Error(apiErrorText(j));
       }
       await downloadBlob(
         await resp.blob(),
@@ -726,7 +802,7 @@ async function exportFile() {
       const resp = await fetch("/api/export", { method: "POST", body: imageFormData() });
       if (!resp.ok) {
         const j = await resp.json().catch(() => ({}));
-        throw new Error(j.error || `HTTP ${resp.status}`);
+        throw new Error(apiErrorText(j));
       }
       await downloadBlob(
         await resp.blob(),
@@ -763,7 +839,7 @@ async function exportScene() {
     });
     if (!resp.ok) {
       const j = await resp.json().catch(() => ({}));
-      throw new Error(j.error || `HTTP ${resp.status}`);
+      throw new Error(apiErrorText(j));
     }
     await downloadBlob(await resp.blob(), "scene.litematic");
   } catch (e) {
@@ -792,7 +868,11 @@ els.file.addEventListener("change", () => {
   state.kind = "image";
   state.file = f;
   els.fileName.textContent = f.name;
-  if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
+  if (state.fileUrl) {
+    // не revoke URL, на который ссылаются объекты сцены
+    const referenced = state.scene.some((o) => o.originalUrl === state.fileUrl);
+    if (!referenced) URL.revokeObjectURL(state.fileUrl);
+  }
   state.fileUrl = URL.createObjectURL(f);
   clearResult();
   resetWindows();
@@ -858,6 +938,7 @@ els.addtosceneVox.addEventListener("click", addToScene);
 els.exportBtn.addEventListener("click", exportFile);
 els.exportVox.addEventListener("click", exportFile);
 els.exportscene.addEventListener("click", exportScene);
+els.reconfigure.addEventListener("click", reconfigureSelected);
 
 for (const [el, axis] of [[els.selX, 0], [els.selY, 1], [els.selZ, 2]]) {
   el.addEventListener("change", () => {
@@ -906,6 +987,14 @@ function updateKField() {
   els.kVox.disabled = !adaptiveVox;
 }
 
+// ---------- Инициализация ----------
+
+function refreshDynamicUi() {
+  renderLegend();
+  renderSceneUI();
+  renderWorkspace();
+}
+
 async function initBaseBlocks() {
   try {
     const resp = await fetch("/api/blocks");
@@ -923,4 +1012,5 @@ async function initBaseBlocks() {
 }
 
 updateKField();
+applyLanguage();
 initBaseBlocks();
