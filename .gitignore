@@ -3,4 +3,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 demo_input.png
+demo_input2.png
 *.litematic

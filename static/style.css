@@ -55,12 +55,157 @@ main {
   color: #9aa0a6;
 }
 
+.tab-bar {
+  display: flex;
+  gap: 4px;
+  background: #1b1d21;
+  border: 1px solid #34383e;
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.tab {
+  flex: 1;
+  padding: 7px 4px;
+  font-size: 13px;
+  background: transparent;
+  border: none;
+  border-radius: 6px;
+  color: #9aa0a6;
+}
+
+.tab:hover {
+  background: #2a2d33;
+}
+
+.tab.active {
+  background: #2f6f4f;
+  border-color: transparent;
+  color: #fff;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* display: flex перебивает атрибут hidden — возвращаем его силу */
+.tab-content[hidden],
+#workspace-hint[hidden] {
+  display: none;
+}
+
 .preview {
   flex: 1;
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
   align-items: flex-start;
+}
+
+/* Рабочее пространство: сцена на весь размер + плавающие окна */
+
+.workspace {
+  flex: 1;
+  position: relative;
+  min-height: calc(100vh - 90px);
+  background: #141518;
+  border: 1px solid #34383e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+}
+
+#stage canvas {
+  display: block;
+}
+
+.win {
+  position: absolute;
+  background: #23262b;
+  border: 1px solid #4a4f56;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  z-index: 10;
+  min-width: 140px;
+}
+
+.win-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #c8ccd0;
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid #34383e;
+}
+
+.win-header:active {
+  cursor: grabbing;
+}
+
+.win-close {
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.win-collapse {
+  color: #9aa0a6;
+  font-size: 11px;
+  transition: transform 0.15s;
+}
+
+.win.collapsed .win-collapse {
+  transform: rotate(-90deg);
+}
+
+.win.collapsed .win-body {
+  display: none;
+}
+
+#win-blocks {
+  right: 12px;
+  bottom: 12px;
+  width: 250px;
+}
+
+#win-blocks .win-body {
+  padding: 4px 6px;
+}
+
+#win-blocks #legend {
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.win-body {
+  padding: 6px;
+}
+
+.win-body canvas {
+  display: block;
+  border-radius: 4px;
+  background: #141518;
+}
+
+#workspace-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a7076;
+  font-size: 14px;
+  pointer-events: none;
 }
 
 .pane {
@@ -209,10 +354,91 @@ button.primary:hover:not(:disabled) {
   flex: 0 0 16px;
 }
 
+#scene-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.scene-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 6px 8px;
+  border: 1px solid #34383e;
+  border-radius: 6px;
+  cursor: pointer;
+  background: #1b1d21;
+}
+
+.scene-row:hover {
+  border-color: #4a6f5a;
+}
+
+.scene-row.selected {
+  border-color: #3c8a63;
+  background: #24302a;
+}
+
+.scene-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #c8ccd0;
+}
+
+.scene-dims {
+  color: #9aa0a6;
+  white-space: nowrap;
+}
+
+.scene-mode {
+  color: #7c9a88;
+  white-space: nowrap;
+  font-size: 11px;
+}
+
+.offsets {
+  display: flex;
+  gap: 4px;
+}
+
+.offsets input {
+  flex: 1;
+  min-width: 0;
+}
+
+#scene-edit h4 {
+  margin: 4px 0;
+  font-size: 13px;
+  color: #c8ccd0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+#sel-overwrite-label {
+  align-items: flex-start;
+  line-height: 1.35;
+}
+
 .bname {
   flex: 1;
 }
 
 .bcount {
   color: #9aa0a6;
+}
+
+.lang-select {
+  margin-left: auto;
+  background: #23262b;
+  color: #e6e6e6;
+  border: 1px solid #444;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 13px;
 }
