@@ -90,6 +90,12 @@ main {
   gap: 12px;
 }
 
+/* display: flex перебивает атрибут hidden — возвращаем его силу */
+.tab-content[hidden],
+#workspace-hint[hidden] {
+  display: none;
+}
+
 .preview {
   flex: 1;
   display: flex;

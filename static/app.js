@@ -280,7 +280,10 @@ function drawResultInto(canvas, data) {
 }
 
 function currentResultData() {
-  if (state.activeTab === "scene" && state.scene.length > 0 && state.selected !== null) {
+  if (state.activeTab === "scene") {
+    // В режиме сцены окно показывает только выбранный объект —
+    // без выбора ничего не показываем (не «висит» старый результат)
+    if (state.scene.length === 0 || state.selected === null) return null;
     const o = state.scene[state.selected];
     return {
       width: o.width,
@@ -315,7 +318,9 @@ function currentResultData() {
 }
 
 function currentOriginalUrl() {
-  if (state.activeTab === "scene" && state.scene.length > 0 && state.selected !== null) {
+  if (state.activeTab === "scene") {
+    // как и для пикселизации: только выбранный объект, иначе ничего
+    if (state.scene.length === 0 || state.selected === null) return null;
     return state.scene[state.selected].originalUrl || null;
   }
   if (state.activeTab === "image") return state.fileUrl;
@@ -556,7 +561,7 @@ function renderLegendItems(entries, total) {
 }
 
 function renderLegend() {
-  if (state.scene.length > 0) {
+  if (state.activeTab === "scene" && state.scene.length > 0) {
     const m = mergedScene();
     if (m && !m.error) {
       const counts = new Array(m.palette.length).fill(0);
