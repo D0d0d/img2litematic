@@ -20,10 +20,6 @@
       <button class="tab" data-tab="scene">Сцена</button>
     </div>
 
-    <div class="field" id="view3d-field" hidden>
-      <label class="checkbox"><input type="checkbox" id="view3d" checked> 3D-вид (вращение мышью)</label>
-    </div>
-
     <section class="tab-content" id="tab-image">
       <label class="file-label">
         <input type="file" id="file" accept="image/*">
@@ -150,16 +146,20 @@
     <ul id="legend"></ul>
   </aside>
 
-  <section class="preview">
-    <div class="pane">
-      <h3>Оригинал</h3>
-      <canvas id="original"></canvas>
+  <section class="workspace" id="workspace">
+    <div id="stage" hidden></div>
+
+    <div class="win" id="win-original" hidden>
+      <div class="win-header"><span>Оригинал</span><button class="win-close" title="Закрыть">✕</button></div>
+      <div class="win-body"><canvas id="original"></canvas></div>
     </div>
-    <div class="pane">
-      <h3>Результат</h3>
-      <canvas id="result"></canvas>
-      <div id="viewer3d" hidden></div>
+
+    <div class="win" id="win-result" hidden>
+      <div class="win-header"><span>Пикселизация</span><button class="win-close" title="Закрыть">✕</button></div>
+      <div class="win-body"><canvas id="result"></canvas></div>
     </div>
+
+    <div id="workspace-hint" hidden>Сцена пуста — добавьте объекты из вкладок «Картинка» или «.vox»</div>
   </section>
 </main>
 

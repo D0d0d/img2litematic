@@ -8,15 +8,21 @@ const state = {
   voxFile: null,
   kind: "image",      // "image" | "vox" — что загружали последним
   result: null,       // ответ convert/vox
-  scale: 1,
-  viewer: null,       // интерактивный 3D-вьювер
+  viewer: null,       // 3D-вьювер сцены
   scene: [],          // объекты сцены (композиция)
   selected: null,     // индекс выбранного объекта сцены
+  activeTab: "image",
+  winClosed: { original: false, result: false },
 };
 
 const els = {
   tabs: [...document.querySelectorAll(".tab")],
   contents: { image: $("tab-image"), vox: $("tab-vox"), scene: $("tab-scene") },
+  workspace: $("workspace"),
+  stage: $("stage"),
+  winOriginal: $("win-original"),
+  winResult: $("win-result"),
+  workspaceHint: $("workspace-hint"),
 
   file: $("file"),
   fileName: $("file-name"),
@@ -43,8 +49,6 @@ const els = {
   invert: $("invert"),
   baseblock: $("baseblock"),
   gridlines: $("gridlines"),
-  view3d: $("view3d"),
-  view3dField: $("view3d-field"),
 
   generate: $("generate"),
   addtoscene: $("addtoscene"),
@@ -70,14 +74,17 @@ const els = {
   legend: $("legend"),
   original: $("original"),
   result: $("result"),
-  viewer3d: $("viewer3d"),
 };
 
 // ---------- Вкладки ----------
 
 function switchTab(name) {
+  state.activeTab = name;
   for (const t of els.tabs) t.classList.toggle("active", t.dataset.tab === name);
   for (const [k, el] of Object.entries(els.contents)) el.hidden = k !== name;
+  resetWindows();
+  renderWorkspace();
+  renderLegend();
 }
 
 els.tabs.forEach((t) => t.addEventListener("click", () => switchTab(t.dataset.tab)));
@@ -130,101 +137,247 @@ function clearError() {
   els.error.hidden = true;
 }
 
-// ---------- Превью 2D ----------
+// ---------- Окна рабочей области ----------
 
-function drawOriginal() {
+function resetWindows() {
+  state.winClosed = { original: false, result: false };
+  for (const w of [els.winOriginal, els.winResult]) {
+    delete w.dataset.placed;
+  }
+}
+
+function placeWin(win, x, y) {
+  if (win.dataset.placed) return; // пользователь уже двигал/окно стоит на месте
+  const ws = els.workspace.getBoundingClientRect();
+  const r = win.getBoundingClientRect();
+  win.style.left = Math.min(Math.max(0, x), Math.max(0, ws.width - r.width - 8)) + "px";
+  win.style.top = Math.min(Math.max(0, y), Math.max(0, ws.height - r.height - 8)) + "px";
+  win.dataset.placed = "1";
+}
+
+function setupWindowDrag(win) {
+  const header = win.querySelector(".win-header");
+  header.addEventListener("pointerdown", (e) => {
+    if (e.target.classList.contains("win-close")) return;
+    try {
+      header.setPointerCapture(e.pointerId);
+    } catch (err) {
+      /* синтетические события/старые браузеры — продолжаем без захвата */
+    }
+    const rect = win.getBoundingClientRect();
+    const wsRect = els.workspace.getBoundingClientRect();
+    const offX = e.clientX - rect.left;
+    const offY = e.clientY - rect.top;
+    const move = (ev) => {
+      const x = Math.min(Math.max(0, ev.clientX - wsRect.left - offX), wsRect.width - rect.width);
+      const y = Math.min(Math.max(0, ev.clientY - wsRect.top - offY), wsRect.height - 44);
+      win.style.left = x + "px";
+      win.style.top = y + "px";
+      win.dataset.placed = "1";
+    };
+    const up = () => {
+      header.removeEventListener("pointermove", move);
+      header.removeEventListener("pointerup", up);
+    };
+    header.addEventListener("pointermove", move);
+    header.addEventListener("pointerup", up);
+  });
+}
+
+setupWindowDrag(els.winOriginal);
+setupWindowDrag(els.winResult);
+
+for (const w of [els.winOriginal, els.winResult]) {
+  w.querySelector(".win-close").addEventListener("click", () => {
+    const isOriginal = w.id === "win-original";
+    state.winClosed[isOriginal ? "original" : "result"] = true;
+    w.hidden = true;
+  });
+}
+
+function drawOriginalInto(canvas, url) {
   const img = new Image();
   img.onload = () => {
-    const c = els.original;
-    const scale = Math.min(1, 360 / img.width, 220 / img.height);
-    c.width = Math.max(1, Math.round(img.width * scale));
-    c.height = Math.max(1, Math.round(img.height * scale));
-    const ctx = c.getContext("2d");
+    const scale = Math.min(1, 380 / img.width, 300 / img.height);
+    canvas.width = Math.max(1, Math.round(img.width * scale));
+    canvas.height = Math.max(1, Math.round(img.height * scale));
+    const ctx = canvas.getContext("2d");
     ctx.imageSmoothingEnabled = true;
-    ctx.drawImage(img, 0, 0, c.width, c.height);
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
   };
-  img.src = state.fileUrl;
+  img.src = url;
 }
 
-function drawGrid() {
-  const c = els.result;
-  const r = state.result;
-  const s = state.scale;
-  if (s < 4) return;
-  const ctx = c.getContext("2d");
-  ctx.strokeStyle = "rgba(0,0,0,0.35)";
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  for (let x = 0; x <= r.width; x++) {
-    ctx.moveTo(x * s + 0.5, 0);
-    ctx.lineTo(x * s + 0.5, r.height * s);
-  }
-  for (let y = 0; y <= r.height; y++) {
-    ctx.moveTo(0, y * s + 0.5);
-    ctx.lineTo(r.width * s, y * s + 0.5);
-  }
-  ctx.stroke();
-}
-
-function drawProjection(r) {
-  // плоская затенённая проекция (relief/vox) или пиксельная сетка (2D)
-  const c = els.result;
-  const dispW = r.vox ? r.previewWidth : r.width;
-  const dispH = r.vox ? r.previewHeight : r.height;
-  const maxW = Math.min(760, window.innerWidth - 380);
-  const maxH = Math.min(600, window.innerHeight - 190);
-  const scale = Math.max(1, Math.floor(Math.min(maxW / dispW, maxH / dispH)));
-  c.width = dispW * scale;
-  c.height = dispH * scale;
-  const ctx = c.getContext("2d");
+function drawResultInto(canvas, data) {
+  // data: {width, height, preview?, previewW?, previewH?, grid?, surfaceGrid?, palette?, isVox}
+  canvas.onmousemove = null;
+  els.hover.textContent = "";
+  const dispW = data.previewW || data.width;
+  const dispH = data.previewH || data.height;
+  const scale = Math.max(1, Math.floor(Math.min(400 / dispW, 320 / dispH)));
+  canvas.width = dispW * scale;
+  canvas.height = dispH * scale;
+  const ctx = canvas.getContext("2d");
   ctx.imageSmoothingEnabled = false;
-  ctx.clearRect(0, 0, c.width, c.height);
-  state.scale = scale;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  const grid = r.vox ? null : r.relief ? r.surfaceGrid : r.grid;
-  if (grid) {
-    c.onmousemove = (e) => {
-      const rect = c.getBoundingClientRect();
-      const x = Math.floor((e.clientX - rect.left) / (rect.width / r.width));
-      const y = Math.floor((e.clientY - rect.top) / (rect.height / r.height));
-      if (x < 0 || y < 0 || x >= r.width || y >= r.height) {
+  const grid = data.vox ? null : data.surfaceGrid || data.grid || null;
+  if (grid && data.palette) {
+    canvas.onmousemove = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const x = Math.floor((e.clientX - rect.left) / (rect.width / data.width));
+      const y = Math.floor((e.clientY - rect.top) / (rect.height / data.height));
+      if (x < 0 || y < 0 || x >= data.width || y >= data.height) {
         els.hover.textContent = "";
         return;
       }
-      const b = r.palette[grid[y * r.width + x]];
+      const b = data.palette[grid[y * data.width + x]];
       els.hover.textContent = `${x}, ${y} → ${shortName(b.name)}`;
     };
-  } else {
-    c.onmousemove = null;
-    els.hover.textContent = "";
   }
 
-  if (r.relief || r.vox) {
+  const drawGridOver = () => {
+    if (!data.gridlines || scale < 4) return;
+    ctx.strokeStyle = "rgba(0,0,0,0.35)";
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = 0; x <= data.width; x++) {
+      ctx.moveTo(x * scale + 0.5, 0);
+      ctx.lineTo(x * scale + 0.5, data.height * scale);
+    }
+    for (let y = 0; y <= data.height; y++) {
+      ctx.moveTo(0, y * scale + 0.5);
+      ctx.lineTo(data.width * scale, y * scale + 0.5);
+    }
+    ctx.stroke();
+  };
+
+  if (data.preview) {
     const img = new Image();
     img.onload = () => {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, 0, 0, c.width, c.height);
-      if (!r.vox) drawGrid();
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      drawGridOver();
     };
-    img.src = "data:image/png;base64," + r.preview;
+    img.src = "data:image/png;base64," + data.preview;
   } else {
     const off = document.createElement("canvas");
-    off.width = r.width;
-    off.height = r.height;
+    off.width = data.width;
+    off.height = data.height;
     const octx = off.getContext("2d");
-    const imgData = octx.createImageData(r.width, r.height);
-    const data = imgData.data;
-    for (let i = 0; i < r.grid.length; i++) {
-      const col = r.palette[r.grid[i]].color;
-      data[i * 4] = col[0];
-      data[i * 4 + 1] = col[1];
-      data[i * 4 + 2] = col[2];
-      data[i * 4 + 3] = 255;
+    const imgData = octx.createImageData(data.width, data.height);
+    const px = imgData.data;
+    for (let i = 0; i < grid.length; i++) {
+      const col = data.palette[grid[i]].color;
+      px[i * 4] = col[0];
+      px[i * 4 + 1] = col[1];
+      px[i * 4 + 2] = col[2];
+      px[i * 4 + 3] = 255;
     }
     octx.putImageData(imgData, 0, 0);
-    ctx.drawImage(off, 0, 0, c.width, c.height);
-    drawGrid();
+    ctx.drawImage(off, 0, 0, canvas.width, canvas.height);
+    drawGridOver();
   }
+}
+
+function currentResultData() {
+  if (state.activeTab === "scene" && state.scene.length > 0 && state.selected !== null) {
+    const o = state.scene[state.selected];
+    return {
+      width: o.width,
+      height: o.height,
+      preview: o.preview,
+      previewW: o.previewW,
+      previewH: o.previewH,
+      surfaceGrid: o.surfaceGrid,
+      palette: o.palette,
+      isVox: o.isVox,
+      gridlines: els.gridlines.checked && !o.isVox,
+    };
+  }
+  const r = state.result;
+  if (!r) return null;
+  if (r.vox) {
+    return {
+      width: r.width, height: r.height,
+      preview: r.preview, previewW: r.previewWidth, previewH: r.previewHeight,
+      isVox: true, gridlines: false,
+    };
+  }
+  if (r.relief) {
+    return {
+      width: r.width, height: r.height,
+      preview: r.preview, previewW: r.width, previewH: r.height,
+      surfaceGrid: r.surfaceGrid, palette: r.palette,
+      isVox: false, gridlines: els.gridlines.checked,
+    };
+  }
+  return { ...r, isVox: false, gridlines: els.gridlines.checked };
+}
+
+function currentOriginalUrl() {
+  if (state.activeTab === "scene" && state.scene.length > 0 && state.selected !== null) {
+    return state.scene[state.selected].originalUrl || null;
+  }
+  if (state.activeTab === "image") return state.fileUrl;
+  return null;
+}
+
+// ---------- Рабочая область: сцена + окна ----------
+
+function renderStage(objs) {
+  if (state.viewer) {
+    state.viewer.dispose();
+    state.viewer = null;
+  }
+  els.stage.replaceChildren();
+  if (!objs) {
+    els.stage.hidden = true;
+    return;
+  }
+  els.stage.hidden = false;
+  state.viewer = Viewer3D(els.stage, objs);
+  if (!state.viewer) {
+    els.stage.textContent = "WebGL недоступен — 3D-вид не отображается";
+  }
+}
+
+function renderWorkspace() {
+  // Сцена: объединённая сцена или свежий 3D-результат — на всё пространство
+  let objs = null;
+  if (state.scene.length > 0) {
+    const m = mergedScene();
+    if (m && !m.error) objs = [m];
+  } else if (state.result && (state.result.relief || state.result.vox)) {
+    objs = [resultAsObject(state.result)];
+  }
+  renderStage(objs);
+
+  // Окно «Пикселизация»
+  const resultData = currentResultData();
+  const showResult = resultData && !state.winClosed.result;
+  els.winResult.hidden = !showResult;
+  if (showResult) {
+    drawResultInto(els.result, resultData);
+    placeWin(els.winResult, 16, 16);
+  }
+
+  // Окно «Оригинал»
+  const origUrl = currentOriginalUrl();
+  const showOriginal = origUrl && !state.winClosed.original;
+  els.winOriginal.hidden = !showOriginal;
+  if (showOriginal) {
+    drawOriginalInto(els.original, origUrl);
+    const x = 16;
+    const y = els.winResult.hidden ? 16 : els.winResult.getBoundingClientRect().bottom -
+      els.workspace.getBoundingClientRect().top + 8;
+    placeWin(els.winOriginal, x, y);
+  }
+
+  // Подсказка на пустой сцене
+  els.workspaceHint.hidden = !(
+    state.activeTab === "scene" &&
+    state.scene.length === 0
+  );
 }
 
 // ---------- Сцена ----------
@@ -243,7 +396,6 @@ function decodeGrid(o) {
 }
 
 function buildMerged() {
-  // WYSIWYG-слияние сцены по тем же правилам, что /api/compose
   if (state.scene.length === 0) return null;
   const minx = Math.min(...state.scene.map((o) => o.offset[0]));
   const miny = Math.min(...state.scene.map((o) => o.offset[1]));
@@ -257,7 +409,6 @@ function buildMerged() {
   const volume = sx * sy * sz;
   if (volume > 16_000_000) return { error: "Сцена слишком большая для превью" };
 
-  // объединённая палитра: air всегда индекс 0
   const palette = [{ name: "minecraft:air", color: [205, 213, 219] }];
   const byName = new Map([["minecraft:air", 0]]);
   for (const o of state.scene) {
@@ -314,6 +465,12 @@ function resultAsObject(r) {
     depth: sz,
     offset: [0, 0, 0],
     overwrite: false,
+    preview: r.preview || null,
+    previewW: r.vox ? r.previewWidth : r.width,
+    previewH: r.vox ? r.previewHeight : r.height,
+    surfaceGrid: r.surfaceGrid || null,
+    originalUrl: state.kind === "image" ? state.fileUrl : null,
+    isVox: !!r.vox,
   };
 }
 
@@ -329,7 +486,7 @@ function addToScene() {
   state.selected = state.scene.length - 1;
   invalidateMerged();
   renderSceneUI();
-  renderResult();
+  renderWorkspace();
   renderLegend();
   switchTab("scene");
 }
@@ -355,13 +512,15 @@ function renderSceneUI() {
     const dims = document.createElement("span");
     dims.className = "scene-dims";
     dims.textContent = `${o.width}×${o.height}×${o.depth}`;
-    const state_ = document.createElement("span");
-    state_.className = "scene-mode";
-    state_.textContent = o.overwrite ? "затирает" : "вживление";
-    row.append(name, dims, state_);
+    const mode_ = document.createElement("span");
+    mode_.className = "scene-mode";
+    mode_.textContent = o.overwrite ? "затирает" : "вживление";
+    row.append(name, dims, mode_);
     row.addEventListener("click", () => {
       state.selected = idx;
+      resetWindows();
       renderSceneUI();
+      renderWorkspace();
     });
     els.sceneList.appendChild(row);
   });
@@ -374,42 +533,6 @@ function renderSceneUI() {
     els.selZ.value = o.offset[2];
     els.selOverwrite.checked = !o.overwrite;
   }
-}
-
-// ---------- Рендер результата ----------
-
-function renderResult() {
-  const r = state.result;
-  const c = els.result;
-  if (state.viewer) {
-    state.viewer.dispose();
-    state.viewer = null;
-  }
-  els.viewer3d.replaceChildren();
-
-  // 3D: сцена (WYSIWYG-слияние) или один свежий результат relief/vox
-  let objs = null;
-  if (state.scene.length > 0) {
-    const m = mergedScene();
-    if (m && !m.error) objs = [m];
-  } else if (r && (r.relief || r.vox)) {
-    objs = [resultAsObject(r)];
-  }
-
-  if (objs && els.view3d.checked) {
-    c.hidden = true;
-    els.viewer3d.hidden = false;
-    els.hover.textContent = "";
-    state.viewer = Viewer3D(els.viewer3d, objs);
-    if (state.viewer) return;
-    els.viewer3d.textContent = "WebGL недоступен — 3D-вид не отображается";
-    if (state.scene.length > 0) return;
-  }
-  els.viewer3d.hidden = true;
-  c.hidden = false;
-  if (!r) return;
-
-  drawProjection(r);
 }
 
 // ---------- Легенда и статистика ----------
@@ -451,11 +574,15 @@ function renderLegend() {
       els.legend.innerHTML = "";
       els.stats.textContent = `Сцена: ${state.scene.length} объект(ов)`;
     }
-    els.view3dField.hidden = false;
     els.exportscene.disabled = false;
     return;
   }
   const r = state.result;
+  if (!r) {
+    els.legend.innerHTML = "";
+    els.stats.textContent = "";
+    return;
+  }
   const total = r.stats.totalBlocks;
   renderLegendItems(r.palette, total);
   const orient = r.vox ? "" : r.orientation === "vertical" ? "вертикальная · " : "ковёр · ";
@@ -465,7 +592,6 @@ function renderLegend() {
   const vox = r.vox ? ` · vox ${r.width}×${r.height}×${r.depth}` : "";
   els.stats.textContent =
     `${r.width}×${r.height} · ${r.effectiveK} типов блоков · ${mode} · ${orient}${rel}${vox}${dith}`;
-  els.view3dField.hidden = !(r.relief || r.vox);
 }
 
 // ---------- Генерация ----------
@@ -476,12 +602,10 @@ function clearResult() {
     state.viewer.dispose();
     state.viewer = null;
   }
-  els.viewer3d.replaceChildren();
-  els.viewer3d.hidden = true;
-  const c = els.result;
-  c.hidden = false;
-  c.width = 0;
-  c.height = 0;
+  els.stage.replaceChildren();
+  els.stage.hidden = true;
+  els.winOriginal.hidden = true;
+  els.winResult.hidden = true;
   els.legend.innerHTML = "";
   els.stats.textContent = "";
   els.hover.textContent = "";
@@ -489,6 +613,7 @@ function clearResult() {
   els.addtosceneVox.disabled = true;
   els.exportBtn.disabled = true;
   els.exportVox.disabled = true;
+  els.workspaceHint.hidden = true;
 }
 
 async function generateImage() {
@@ -506,7 +631,8 @@ async function generateImage() {
     state.result = j;
     els.addtoscene.disabled = !(j.relief || j.vox);
     els.exportBtn.disabled = false;
-    renderResult();
+    resetWindows();
+    renderWorkspace();
     renderLegend();
   } catch (e) {
     showError(e.message || String(e));
@@ -530,7 +656,8 @@ async function generateVox() {
     state.result = j;
     els.addtosceneVox.disabled = false;
     els.exportVox.disabled = false;
-    renderResult();
+    resetWindows();
+    renderWorkspace();
     renderLegend();
   } catch (e) {
     showError(e.message || String(e));
@@ -644,8 +771,8 @@ els.file.addEventListener("change", () => {
   els.fileName.textContent = f.name;
   if (state.fileUrl) URL.revokeObjectURL(state.fileUrl);
   state.fileUrl = URL.createObjectURL(f);
-  clearResult(); // не показываем превью предыдущего файла
-  drawOriginal();
+  clearResult();
+  resetWindows();
   generateImage();
 });
 
@@ -656,6 +783,7 @@ els.voxfile.addEventListener("change", () => {
   state.voxFile = f;
   els.voxfileName.textContent = f.name;
   clearResult();
+  resetWindows();
   generateVox();
 });
 
@@ -697,10 +825,7 @@ els.kVox.addEventListener("input", () => {
 });
 
 els.gridlines.addEventListener("change", () => {
-  if (state.result) renderResult();
-});
-els.view3d.addEventListener("change", () => {
-  renderResult();
+  renderWorkspace();
 });
 
 els.generate.addEventListener("click", generateImage);
@@ -718,7 +843,7 @@ for (const [el, axis] of [[els.selX, 0], [els.selY, 1], [els.selZ, 2]]) {
     o.offset[axis] = parseInt(el.value, 10) || 0;
     invalidateMerged();
     renderSceneUI();
-    renderResult();
+    renderWorkspace();
     renderLegend();
   });
 }
@@ -728,7 +853,7 @@ els.selOverwrite.addEventListener("change", () => {
   o.overwrite = !els.selOverwrite.checked;
   invalidateMerged();
   renderSceneUI();
-  renderResult();
+  renderWorkspace();
   renderLegend();
 });
 els.sceneDelete.addEventListener("click", () => {
@@ -737,7 +862,7 @@ els.sceneDelete.addEventListener("click", () => {
   state.selected = state.scene.length ? Math.min(state.selected, state.scene.length - 1) : null;
   invalidateMerged();
   renderSceneUI();
-  renderResult();
+  renderWorkspace();
   renderLegend();
 });
 els.clearscene.addEventListener("click", () => {
@@ -745,7 +870,7 @@ els.clearscene.addEventListener("click", () => {
   state.selected = null;
   invalidateMerged();
   renderSceneUI();
-  renderResult();
+  renderWorkspace();
   renderLegend();
 });
 

@@ -11,8 +11,8 @@
 function Viewer3D(container, objects) {
   if (typeof THREE === "undefined") return null;
 
-  const maxW = () => Math.min(760, window.innerWidth - 380);
-  const maxH = () => Math.min(600, window.innerHeight - 190);
+  const maxW = () => container.clientWidth || 760;
+  const maxH = () => container.clientHeight || 600;
 
   let renderer;
   try {
@@ -128,10 +128,12 @@ function Viewer3D(container, objects) {
   );
 
   const onResize = () => {
-    camera.aspect = maxW() / maxH();
+    camera.aspect = maxW() / Math.max(maxH(), 1);
     camera.updateProjectionMatrix();
     renderer.setSize(maxW(), maxH());
   };
+  const ro = new ResizeObserver(onResize);
+  ro.observe(container);
   window.addEventListener("resize", onResize);
 
   let disposed = false;
@@ -145,6 +147,7 @@ function Viewer3D(container, objects) {
   return {
     dispose() {
       disposed = true;
+      ro.disconnect();
       window.removeEventListener("resize", onResize);
       renderer.dispose();
       canvas.remove();

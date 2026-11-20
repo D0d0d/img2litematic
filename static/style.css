@@ -98,6 +98,81 @@ main {
   align-items: flex-start;
 }
 
+/* Рабочее пространство: сцена на весь размер + плавающие окна */
+
+.workspace {
+  flex: 1;
+  position: relative;
+  min-height: calc(100vh - 90px);
+  background: #141518;
+  border: 1px solid #34383e;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+#stage {
+  position: absolute;
+  inset: 0;
+}
+
+#stage canvas {
+  display: block;
+}
+
+.win {
+  position: absolute;
+  background: #23262b;
+  border: 1px solid #4a4f56;
+  border-radius: 8px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.55);
+  z-index: 10;
+  min-width: 140px;
+}
+
+.win-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  font-size: 13px;
+  color: #c8ccd0;
+  cursor: grab;
+  user-select: none;
+  border-bottom: 1px solid #34383e;
+}
+
+.win-header:active {
+  cursor: grabbing;
+}
+
+.win-close {
+  padding: 2px 7px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+
+.win-body {
+  padding: 6px;
+}
+
+.win-body canvas {
+  display: block;
+  border-radius: 4px;
+  background: #141518;
+}
+
+#workspace-hint {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #6a7076;
+  font-size: 14px;
+  pointer-events: none;
+}
+
 .pane {
   background: #23262b;
   border: 1px solid #34383e;
